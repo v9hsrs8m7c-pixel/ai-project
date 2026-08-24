@@ -13,19 +13,22 @@
     "test": "node --test --experimental-strip-types src/config/sites/__tests__/site.test.ts src/data/__tests__/games.test.ts src/data/sources/gamedistribution/__tests__/adapter.test.ts"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.15.0",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^26.2.0",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
     "autoprefixer": "^10.5.4",
     "next": "^16.3.1",
     "postcss": "^8.5.26",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^7.0.2"
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^1.15.0"
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }
