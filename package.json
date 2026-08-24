@@ -5,15 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cf": "opennextjs-cloudflare build",
-    "preview:cf": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy:cf": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "start": "next start",
     "lint": "next lint",
     "test": "node --test --experimental-strip-types src/config/sites/__tests__/site.test.ts src/data/__tests__/games.test.ts src/data/sources/gamedistribution/__tests__/adapter.test.ts"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.15.0",
     "@tailwindcss/postcss": "^4.3.3",
     "autoprefixer": "^10.5.4",
     "next": "^16.3.1",
