@@ -1,6 +1,6 @@
-# 域名购买 + Vercel 部署 + GD 白名单 — Step-by-Step 清单
+# 域名购买 + Vercel 部署 + GD 白名单 + 站内广告 — Step-by-Step 清单
 
-> 目标：把一个面向欧美用户的 GameDistribution 游戏聚合站，从"本地 mock + 预览"推进到"真实域名 + 真实游戏就地播放 + 收益归因 + SEO 就绪"。
+> 目标：把一个面向欧美用户的 GameDistribution 游戏聚合站，从"本地 mock + 预览"推进到"真实域名 + 真实游戏就地播放 + 双广告收益线（游戏内 GD 分成 + 站内 AdSense）+ SEO 就绪"。
 > 适用架构：Next.js 16 动态 SSR（按 `host` 头解析多站点），部署到 **Vercel（Next.js 原生，零适配器）**。
 > 域名 `darlynmae.com` 已通过 **Cloudflare Registrar** 购买并托管（NS 自动指向 Cloudflare，仅作 DNS / 注册商使用；网站实际跑在 Vercel）。
 >
@@ -92,7 +92,7 @@
 1. 打开 `https://darlynmae.com/games/wheely-2`，确认游戏**就地播放**（不跳 GD 站外）。
 2. 确认 iframe 的 `gd_sdk_referrer_url=https://darlynmae.com/games/wheely-2`。
 3. 控制台检查广告请求是否从你的页面 URL 发出（GD 要求 ads 从游戏页 URL 请求，否则收益受损）。
-4. 确认 Google Ad Manager 关联 / onboarding 已完成，否则游戏内广告不填充。
+4. 白名单通过即代表**游戏内广告由 GD 自动变现并给你分成，无需 GAM 账号**（注册时选"无 GAM"即正常路径，GD 内部是否用 GAM 填充与你的收款无关）。
 5. **验证通过后再批量接入 30–50 款**——先打通流程，再堆量。
 
 ---
@@ -103,6 +103,29 @@
 - 游戏包裹页提供**唯一文案** + `VideoGame` 结构化数据 + OG 图。
 - iframe 游戏本体不被收录，收录靠包裹层内容；多站用 `canonical` / 差异化文案防站群判定。
 - Vercel 全球边缘（~100 PoP 含欧美）+ 自动 SSL，对 Core Web Vitals / 欧美延迟友好，利于 SEO。
+
+---
+
+## 阶段 6：站内广告变现（来源②，可选，独立于 GD）
+
+> 这是你的**第二条收益线**：游戏**页面上**的广告（首页 banner、游戏列表信息流、侧边栏等），由你自己的广告网络变现，收益直接进你的 Google/广告平台账户，**与 GD 完全无关**。
+> GD 白名单（阶段 3）只解决"游戏就地播放 + 游戏内分成"，不影响站内广告。
+
+### 6-A：申请广告网络（推荐 Google AdSense）
+1. 站点先跑稳、积累一定自然流量与原创内容（AdSense 对新站有流量/内容质量审核，通常需数周至数月自然流量才易过审；急于变现可先评估 Ezoic / Monumetric / 直客等替代方案）。
+2. 访问 adsense.google.com → 用你的 Google 账号登录 → **添加站点 `darlynmae.com`**。
+3. 按提示在站点 `<head>` 插入 AdSense 验证代码，提交审核。
+4. 过审后 AdSense 后台生成**广告单元（Ad Unit）**，拿到 `data-ad-client` / `data-ad-slot`。
+
+### 6-B：接入代码（已有预留位）
+- 代码已预留广告配置：`src/config/types.ts` 定义 `AdSlot` / `AdsProvider` / `AdsConfig`，默认 `ads.enabled=false`（关闭）。
+- 接入步骤：把 `ads.enabled` 置 `true` → 填入 AdSense `client` / `slot` → 新增 `<AdSlot>` 组件在首页 / 列表页 / 侧栏渲染。
+- ⚠️ 接入前确认：① 已通过 AdSense 审核；② 广告位不遮挡游戏 iframe（避免误触与合规风险）；③ 遵守欧美隐私法规（加 Cookie 同意横幅）。
+
+### 6-C：两条收益线关系
+- **① 游戏内广告（GD 分成）**：GD 全包变现，白名单通过即生效，你只拿钱。
+- **② 站内广告（AdSense）**：你自管，独立结算，与 GD 无交集。
+- 两者互补、互不冲突，可同时跑。
 
 ---
 
@@ -132,6 +155,12 @@ Install   : npm install
 添加：www.darlynmae.com
 ```
 
+**5) 站内广告（可选）AdSense → 加 darlynmae.com → 过审后插 Ad Unit（与 GD 无关）**
+```
+adsense.google.com → 添加站点 → 插验证码 → 过审拿 client/slot
+代码：ads.enabled=true + <AdSlot> 组件
+```
+
 ---
 
 ## 决策备注（已确认）
@@ -140,3 +169,4 @@ Install   : npm install
 - 域名仍在 Cloudflare Registrar 管理 DNS（阶段 1 灰云指向 Vercel），未损失域名资产。
 - 后续若流量做大、带宽成本敏感，可再评估迁回 Cloudflare Pages/Workers（届时需要 OpenNext 最新版 + 处理 Next 16 兼容）。
 - 多站点按域名解析，`resolveCurrentSite()` 走 `headers()` 读 host，**零代码改动**。
+- ⚠️ **GAM 非必选**：注册 GD Publisher 时可选"无 GAM 账号"（用户即以该选项注册通过）。游戏内广告由 GD 自身变现并分成，**无需 GAM onboarding**，此前"GD 与 GAM 强绑定"的判断已作废。
