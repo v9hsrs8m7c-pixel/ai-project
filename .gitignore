@@ -32,3 +32,8 @@ next-env.d.ts
 .next-verify/
 *.log
 test.js
+
+# opennext / cloudflare build output
+.open-next/
+.workers/
+.wrangler/
