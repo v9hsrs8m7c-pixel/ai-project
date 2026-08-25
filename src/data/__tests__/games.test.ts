@@ -14,7 +14,8 @@ import {
 } from "../games.ts";
 
 test("getAllGames returns the full catalog", () => {
-  assert.ok(getAllGames().length >= 12);
+  // Stage A: catalog is self-hosted originals only (GD source reserved/empty).
+  assert.ok(getAllGames().length >= 8);
   assert.equal(getAllGames().length, games.length);
 });
 
