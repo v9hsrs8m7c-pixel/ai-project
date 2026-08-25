@@ -37,8 +37,55 @@ export default async function GameDetailPage({
   const site = await resolveCurrentSite();
   const related = getRelatedGames(game);
 
+  // Structured data so search engines understand the game as an entity and
+  // the breadcrumb hierarchy. Game body itself is not crawlable (iframe), so
+  // this markup is part of the page's indexable SEO asset.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "VideoGame",
+        name: game.title,
+        description: game.description,
+        genre: game.category,
+        url: `https://${site.domain}/games/${game.slug}`,
+        inLanguage: "en",
+        gamePlatform: "Web browser",
+        applicationCategory: "Game",
+        operatingSystem: "Any",
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: `https://${site.domain}/`,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: game.category,
+            item: `https://${site.domain}/category/${game.category.toLowerCase()}`,
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: game.title,
+            item: `https://${site.domain}/games/${game.slug}`,
+          },
+        ],
+      },
+    ],
+  };
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <nav className="mb-6 text-sm opacity-70" style={{ color: "var(--color-text)" }}>
         <Link href="/" className="hover:opacity-100" style={{ color: "var(--color-accent)" }}>
           Home

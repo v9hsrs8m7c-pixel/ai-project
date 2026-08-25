@@ -46,11 +46,6 @@ export async function generateMetadata(): Promise<Metadata> {
       title: site.seo.defaultTitle ?? site.title,
       description: site.seo.defaultDescription ?? site.description,
     },
-    alternates: {
-      canonical: site.seo.canonicalDomain
-        ? `https://${site.seo.canonicalDomain}`
-        : undefined,
-    },
   };
 }
 

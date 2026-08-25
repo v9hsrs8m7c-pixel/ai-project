@@ -26,7 +26,6 @@ export const defaultSite: SiteConfig = {
     keywords: ["html5 games", "free games", "online games", "browser games", "arcade"],
     canonicalDomain: "darlynmae.com",
     robots: "index,follow",
-    ogImage: "/og-image.png",
     twitterCard: "summary_large_image",
     sitemap: true,
   },
