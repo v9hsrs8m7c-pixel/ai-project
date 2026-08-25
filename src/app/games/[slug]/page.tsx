@@ -132,6 +132,62 @@ export default async function GameDetailPage({
         </aside>
       </div>
 
+      {/* Indexable SEO body. The game itself is inside an iframe (not crawlable),
+          so this original text is the page's primary on-page SEO asset. */}
+      {game.content && (
+        <article className="mx-auto mt-12 max-w-3xl space-y-8 px-4">
+          <section>
+            <h2 className="text-2xl font-bold" style={{ color: "var(--color-text)" }}>
+              About {game.title}
+            </h2>
+            <p className="mt-2 text-base leading-relaxed opacity-80" style={{ color: "var(--color-text)" }}>
+              {game.content.intro}
+            </p>
+          </section>
+          <section>
+            <h2 className="text-2xl font-bold" style={{ color: "var(--color-text)" }}>
+              How to Play
+            </h2>
+            <p className="mt-2 text-base leading-relaxed opacity-80" style={{ color: "var(--color-text)" }}>
+              {game.content.gameplay}
+            </p>
+          </section>
+          <section>
+            <h2 className="text-2xl font-bold" style={{ color: "var(--color-text)" }}>
+              Controls
+            </h2>
+            <p className="mt-2 text-base leading-relaxed opacity-80" style={{ color: "var(--color-text)" }}>
+              {game.content.controls}
+            </p>
+          </section>
+          <section>
+            <h2 className="text-2xl font-bold" style={{ color: "var(--color-text)" }}>
+              Features
+            </h2>
+            <p className="mt-2 text-base leading-relaxed opacity-80" style={{ color: "var(--color-text)" }}>
+              {game.content.features}
+            </p>
+          </section>
+          <section>
+            <h2 className="text-2xl font-bold" style={{ color: "var(--color-text)" }}>
+              FAQ
+            </h2>
+            <div className="mt-3 space-y-4">
+              {game.content.faq.map((item, i) => (
+                <div key={i}>
+                  <h3 className="text-lg font-semibold" style={{ color: "var(--color-text)" }}>
+                    {item.q}
+                  </h3>
+                  <p className="mt-1 text-base leading-relaxed opacity-80" style={{ color: "var(--color-text)" }}>
+                    {item.a}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </article>
+      )}
+
       <Section title="Related Games" subtitle="More games you might enjoy.">
         <GameGrid games={related} />
       </Section>

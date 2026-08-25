@@ -65,6 +65,22 @@ export interface SiteConfig {
   ads: AdsConfig;
 }
 
+// Structured SEO body for a game detail page. Mirrors the five content
+// modules agreed for the catalog: 简介 / 玩法 / 操作说明 / 特色 / FAQ.
+// `faq` is a list of Q&A pairs rendered as indexable FAQ markup.
+export interface GameFaq {
+  q: string;
+  a: string;
+}
+
+export interface GameContent {
+  intro: string; // 简介
+  gameplay: string; // 玩法
+  controls: string; // 操作说明
+  features: string; // 特色
+  faq: GameFaq[]; // FAQ
+}
+
 // Game catalog model. `siteIds` is intentionally an array so a single game
 // can belong to multiple sites in the future (many-to-many reservation).
 export interface Game {
@@ -91,6 +107,11 @@ export interface Game {
   width?: number;
   height?: number;
   tags?: string[]; // GD tags, reserved for SEO
+  // Structured, indexable SEO body for the game detail page. The playable
+  // game itself lives inside an iframe and is NOT crawlable, so this text is
+  // the page's primary on-page SEO asset. Optional so legacy/mock entries can
+  // omit it without breaking types.
+  content?: GameContent;
   // True when this entry is a live publisher game (real DGI embed), as
   // opposed to a mock catalog entry used for development/preview.
   real?: boolean;
