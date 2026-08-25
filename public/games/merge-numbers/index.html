@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Merge Numbers</title>
+<style>
+  :root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#22d3ee;--muted:#8b8ba7}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  h1{font-size:20px;letter-spacing:.04em}
+  .wrap{width:min(92vw,480px)}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .score{background:#16162a;border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}
+  canvas{width:100%;background:#16162a;border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
+  .hint{color:var(--muted);font-size:13px;text-align:center}
+  button{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar"><h1>Merge Numbers</h1><div class="score">Score: <span id="score">0</span></div></div>
+  <canvas id="c" width="480" height="480"></canvas>
+  <div class="hint">Arrow keys or swipe to merge. Reach 2048.</div>
+  <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
+</div>
+<script>
+const SIZE=4, CELL=480, PAD=12, GAP=12;
+const step=(CELL-PAD*2-GAP*(SIZE-1))/SIZE;
+let grid, score, over, won;
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score');
+
+function init(){
+  grid=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  score=0; over=false; won=false;
+  spawn(); spawn(); draw();
+}
+function spawn(){
+  const e=[];
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++)if(!grid[r][c])e.push([r,c]);
+  if(!e.length)return;
+  const [r,c]=e[Math.floor(Math.random()*e.length)];
+  grid[r][c]=Math.random()<0.9?2:4;
+}
+function updateScore(){scoreEl.textContent=score;}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function colorFor(v){const m={2:'#3a3a5c',4:'#4a4a78',8:'#7c5cff',16:'#9b6bff',32:'#22d3ee',64:'#22d3ee',128:'#34d399',256:'#34d399',512:'#fbbf24',1024:'#fb7185',2048:'#f43f5e'};return m[v]||'#f43f5e';}
+function draw(){
+  ctx.clearRect(0,0,CELL,CELL);
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    const x=PAD+c*(step+GAP), y=PAD+r*(step+GAP);
+    ctx.fillStyle='#1d1d33'; roundRect(x,y,step,step,8); ctx.fill();
+    const v=grid[r][c];
+    if(v){
+      ctx.fillStyle=colorFor(v); roundRect(x,y,step,step,8); ctx.fill();
+      ctx.fillStyle=v>4?'#08121a':'#e7e7f5';
+      ctx.font='700 '+(v>=1000?step*0.32:step*0.4)+'px system-ui';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(v,x+step/2,y+step/2);
+    }
+  }
+  if(over||won)overlay();
+}
+function overlay(){
+  ctx.fillStyle='rgba(8,8,20,.78)'; ctx.fillRect(0,0,CELL,CELL);
+  ctx.fillStyle=won?'#34d399':'#f43f5e';
+  ctx.font='700 34px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(won?'You made 2048!':'Game Over',CELL/2,CELL/2-14);
+  ctx.fillStyle='#e7e7f5'; ctx.font='600 16px system-ui';
+  ctx.fillText('Tap New Game to play again',CELL/2,CELL/2+22);
+}
+function mergeRow(row){
+  const nums=row.filter(v=>v), res=[]; let gained=0;
+  for(let i=0;i<nums.length;i++){
+    if(nums[i]===nums[i+1]){const v=nums[i]*2;res.push(v);gained+=v;nums.splice(i+1,1);}
+    else res.push(nums[i]);
+  }
+  while(res.length<SIZE)res.push(0);
+  return {row:res,gained};
+}
+function moveLeft(){let g=0;for(let r=0;r<SIZE;r++){const {row,gained}=mergeRow(grid[r]);grid[r]=row;g+=gained;}return g;}
+function moveRight(){let g=0;for(let r=0;r<SIZE;r++){const rev=[...grid[r]].reverse();const {row,gained}=mergeRow(rev);grid[r]=row.reverse();g+=gained;}return g;}
+function moveUp(){let g=0;for(let c=0;c<SIZE;c++){const col=[];for(let r=0;r<SIZE;r++)col.push(grid[r][c]);const {row,gained}=mergeRow(col);for(let r=0;r<SIZE;r++)grid[r][c]=row[r];g+=gained;}return g;}
+function moveDown(){let g=0;for(let c=0;c<SIZE;c++){const col=[];for(let r=0;r<SIZE;r++)col.push(grid[r][c]);const {row,gained}=mergeRow(col.reverse());const rr=row.reverse();for(let r=0;r<SIZE;r++)grid[r][c]=rr[r];g+=gained;}return g;}
+const gainMap={left:moveLeft,right:moveRight,up:moveUp,down:moveDown};
+function movesAvailable(){
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    if(!grid[r][c])return true;
+    if(c<SIZE-1&&grid[r][c]===grid[r][c+1])return true;
+    if(r<SIZE-1&&grid[r][c]===grid[r+1][c])return true;
+  }
+  return false;
+}
+function move(dir){
+  if(over)return;
+  const before=JSON.stringify(grid);
+  score+=gainMap[dir]();
+  if(JSON.stringify(grid)===before)return;
+  if(!won&&grid.flat().includes(2048))won=true;
+  spawn();
+  if(!movesAvailable())over=true;
+  updateScore(); draw();
+}
+addEventListener('keydown',e=>{
+  const k={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down'}[e.key];
+  if(k){e.preventDefault();move(k);}
+});
+let tsx=0,tsy=0;
+canvas.addEventListener('touchstart',e=>{const t=e.touches[0];tsx=t.clientX;tsy=t.clientY;},{passive:true});
+canvas.addEventListener('touchend',e=>{
+  const t=e.changedTouches[0],dx=t.clientX-tsx,dy=t.clientY-tsy;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;
+  if(Math.abs(dx)>Math.abs(dy))move(dx>0?'right':'left');else move(dy>0?'down':'up');
+},{passive:true});
+document.getElementById('restart').addEventListener('click',init);
+init();
+</script>
+</body></html>

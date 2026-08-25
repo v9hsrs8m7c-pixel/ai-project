@@ -1,11 +1,14 @@
 import type { CategoryInfo, Game } from "../config/types.ts";
 import { getGDGames } from "./sources/gamedistribution/adapter.ts";
+import { getSelfHostedGames } from "./sources/selfhosted/games.ts";
 
-// The game catalog is sourced through the GameDistribution adapter. In this
-// phase the adapter reads a mock GD catalog (raw GD field shape); when real
-// publisher credentials / an official feed become available, the adapter
-// normalizes live data with zero changes to the rest of the app.
-export const games: Game[] = getGDGames();
+// The catalog blends two sources today:
+//   1. GameDistribution adapter (mock now, live DGI feed later) — Phase 2.
+//   2. Self-hosted original HTML5 games served from /public — Stage A, used
+//      to build real playable, jump-free traffic we fully own.
+// Both normalize into the same decoupled `Game` model, so pages never care
+// which source a game came from.
+export const games: Game[] = [...getGDGames(), ...getSelfHostedGames()];
 
 // Return only the games that belong to a given site. Reserved for future
 // multi-site catalog filtering; not yet consumed by any page.

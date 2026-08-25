@@ -1,19 +1,20 @@
 import type { Game } from "@/config/types";
 
-// GameEmbed renders a GameDistribution DGI iframe.
+// GameEmbed renders a playable iframe for a game.
 //
-// It prefers a publisher-attributed `embedUrl` (rendered as a responsive
-// iframe we control) and only falls back to the raw `embedCode` HTML snippet
-// when no `embedUrl`-style `embedUrl` is present.
-//
-// The `gd_sdk_referrer_url` query parameter is appended here (per active
-// site + game slug) so revenue attribution lands on the correct domain in a
-// multi-site deployment. GD also uses it for whitelisting / play-in-place.
+// Two sources are supported:
+//   • GameDistribution (`source: "gamedistribution"`) — a publisher-attributed
+//     DGI iframe. The `gd_sdk_referrer_url` query is appended (per active site
+//     + slug) for revenue attribution + GD whitelisting / play-in-place.
+//   • Self-hosted (`source: "selfhosted"`) — our own original HTML5 game served
+//     from /public. Rendered as a plain local iframe with NO referrer (it is
+//     our own asset, jump-free, and not monetized through GD).
 //
 // Badges:
-//   real:true  -> "Verified Publisher" (green) — live DGI embed
-//   MOCK token -> "Demo · mock data"      (accent) — non-live mock catalog
-//   neither    -> none
+//   real:true            -> "Verified Publisher" (green) — live DGI embed
+//   MOCK token           -> "Demo · mock data"  (accent) — non-live mock catalog
+//   source:selfhosted    -> "Self-hosted · original" (accent) — our own game
+//   none of the above    -> none
 
 const MOCK_MARKER = "MOCK";
 
@@ -34,11 +35,17 @@ export function GameEmbed({
   slug?: string;
   className?: string;
 }) {
-  const { embedUrl, embedCode, title, instructions, real } = game;
+  const { embedUrl, embedCode, title, instructions, real, source } = game;
   const isMock = (embedUrl ?? embedCode ?? "").includes(MOCK_MARKER);
+  const isSelfHosted = source === "selfhosted" || (embedUrl?.startsWith("/") ?? false);
 
-  // Only append the referrer when we have both a URL and the slug to build it.
-  const finalSrc = embedUrl && slug ? withReferrer(embedUrl, siteDomain, slug) : embedUrl;
+  // Self-hosted games are our own local assets — render as-is, no referrer.
+  // GD embeds get the attribution query only when we also have the slug.
+  const finalSrc = isSelfHosted
+    ? embedUrl
+    : embedUrl && slug
+      ? withReferrer(embedUrl, siteDomain, slug)
+      : embedUrl;
 
   return (
     <div className={className}>
@@ -89,6 +96,13 @@ export function GameEmbed({
             style={{ background: "var(--color-accent)", color: "#0b0b14" }}
           >
             Demo · mock data
+          </span>
+        ) : isSelfHosted ? (
+          <span
+            className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+            style={{ background: "var(--color-accent)", color: "#0b0b14" }}
+          >
+            Self-hosted · original
           </span>
         ) : null}
       </div>

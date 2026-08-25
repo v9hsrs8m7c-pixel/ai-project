@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Cell Eater</title>
+<style>
+  :root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#34d399;--muted:#8b8ba7}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  h1{font-size:20px;letter-spacing:.04em}
+  .wrap{width:min(92vw,480px)}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .score{background:#16162a;border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}
+  canvas{width:100%;background:#16162a;border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
+  .hint{color:var(--muted);font-size:13px;text-align:center}
+  button{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar"><h1>Cell Eater</h1><div class="score">Size: <span id="score">14</span></div></div>
+  <canvas id="c" width="480" height="480"></canvas>
+  <div class="hint">Move with the mouse. Eat smaller cells, dodge bigger ones.</div>
+  <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
+</div>
+<script>
+const W=480,H=480;
+let player,foods,enemies,over,raf,mouse;
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score');
+function rnd(a,b){return a+Math.random()*(b-a);}
+function init(){
+  player={x:W/2,y:H/2,r:14};
+  mouse={x:W/2,y:H/2};
+  foods=[];for(let i=0;i<46;i++)foods.push({x:rnd(10,W-10),y:rnd(10,H-10)});
+  enemies=[];for(let i=0;i<5;i++)enemies.push(spawnEnemy());
+  over=false;scoreEl.textContent='14';cancelAnimationFrame(raf);loop();
+}
+function spawnEnemy(){return {x:rnd(20,W-20),y:rnd(20,H-20),r:rnd(12,34),vx:rnd(-1,1),vy:rnd(-1,1)};}
+function loop(){
+  if(!over)update();
+  draw();
+  if(!over)raf=requestAnimationFrame(loop);
+}
+function update(){
+  const dx=mouse.x-player.x,dy=mouse.y-player.y,len=Math.hypot(dx,dy)||1;
+  const sp=Math.max(1.1,3.2*(14/player.r));
+  if(len>1){player.x+=dx/len*sp;player.y+=dy/len*sp;}
+  player.x=Math.max(player.r,Math.min(W-player.r,player.x));
+  player.y=Math.max(player.r,Math.min(H-player.r,player.y));
+  // foods
+  for(let i=foods.length-1;i>=0;i--){
+    const f=foods[i];
+    if(Math.hypot(player.x-f.x,player.y-f.y)<player.r){player.r+=0.5;foods.splice(i,1);foods.push({x:rnd(10,W-10),y:rnd(10,H-10)});}
+  }
+  // enemies
+  for(let i=0;i<enemies.length;i++){
+    const e=enemies[i];
+    const edx=player.x-e.x,edy=player.y-e.y,elen=Math.hypot(edx,edy)||1;
+    if(e.r<player.r){e.x+=edx/elen*1.3;e.y+=edy/elen*1.3;}
+    else{e.x+=e.vx;e.y+=e.vy;if(e.x<e.r||e.x>W-e.r)e.vx*=-1;if(e.y<e.r||e.y>H-e.r)e.vy*=-1;}
+    const d=Math.hypot(player.x-e.x,player.y-e.y);
+    if(d<player.r+e.r){
+      if(player.r>e.r){player.r+=e.r*0.18;enemies[i]=spawnEnemy();}
+      else if(e.r>player.r+2){over=true;}
+    }
+  }
+  scoreEl.textContent=Math.round(player.r);
+}
+function draw(){
+  ctx.fillStyle='#16162a';ctx.fillRect(0,0,W,H);
+  foods.forEach(f=>{ctx.fillStyle='#3a3a5c';ctx.beginPath();ctx.arc(f.x,f.y,4,0,7);ctx.fill();});
+  enemies.forEach(e=>{ctx.fillStyle='#fb7185';ctx.globalAlpha=.85;ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,7);ctx.fill();ctx.globalAlpha=1;});
+  ctx.fillStyle='#34d399';ctx.beginPath();ctx.arc(player.x,player.y,player.r,0,7);ctx.fill();
+  if(over){
+    ctx.fillStyle='rgba(8,8,20,.8)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#f43f5e';ctx.font='700 32px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('Game Over',W/2,H/2-10);
+    ctx.fillStyle='#e7e7f5';ctx.font='600 16px system-ui';ctx.fillText('Final size '+Math.round(player.r)+' · tap New Game',W/2,H/2+24);
+  }
+}
+function setMouse(e){const r=canvas.getBoundingClientRect();const cx=e.touches?e.touches[0].clientX:e.clientX;const cy=e.touches?e.touches[0].clientY:e.clientY;mouse.x=(cx-r.left)/r.width*W;mouse.y=(cy-r.top)/r.height*H;}
+canvas.addEventListener('mousemove',setMouse);
+canvas.addEventListener('touchmove',e=>{setMouse(e);e.preventDefault();},{passive:false});
+document.getElementById('restart').addEventListener('click',init);
+init();
+</script>
+</body></html>

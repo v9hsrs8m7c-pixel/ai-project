@@ -94,6 +94,10 @@ export interface Game {
   // True when this entry is a live publisher game (real DGI embed), as
   // opposed to a mock catalog entry used for development/preview.
   real?: boolean;
+  // Origin of the game. "gamedistribution" = GD embed (Phase 2 + revenue
+  // share later). "selfhosted" = our own original HTML5 game served from
+  // /public (Stage A: build traffic with playable, jump-free content we own).
+  source?: "gamedistribution" | "selfhosted";
 }
 
 // Derived category summary used by the Categories section and category pages.

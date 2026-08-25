@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Neon Snake</title>
+<style>
+  :root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#34d399;--muted:#8b8ba7}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  h1{font-size:20px;letter-spacing:.04em}
+  .wrap{width:min(92vw,480px)}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .score{background:#16162a;border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}
+  canvas{width:100%;background:#16162a;border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
+  .hint{color:var(--muted);font-size:13px;text-align:center}
+  button{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar"><h1>Neon Snake</h1><div class="score">Score: <span id="score">0</span></div></div>
+  <canvas id="c" width="480" height="480"></canvas>
+  <div class="hint">Arrow keys or swipe to steer. Eat orbs, avoid walls and yourself.</div>
+  <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
+</div>
+<script>
+const N=24, CELL=480/N, STEP_MS=110;
+let snake, dir, nextDir, food, score, over, acc, last;
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score');
+function init(){
+  snake=[{x:8,y:12},{x:7,y:12},{x:6,y:12}];
+  dir={x:1,y:0}; nextDir={x:1,y:0}; score=0; over=false; acc=0; last=performance.now();
+  placeFood(); scoreEl.textContent='0'; loop(last);
+}
+function placeFood(){
+  while(true){
+    const f={x:(Math.random()*N)|0,y:(Math.random()*N)|0};
+    if(!snake.some(s=>s.x===f.x&&s.y===f.y)){food=f;return;}
+  }
+}
+function step(){
+  dir=nextDir;
+  const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  if(head.x<0||head.y<0||head.x>=N||head.y>=N||snake.some(s=>s.x===head.x&&s.y===head.y)){
+    over=true; draw(); return;
+  }
+  snake.unshift(head);
+  if(head.x===food.x&&head.y===food.y){score++;scoreEl.textContent=score;placeFood();}
+  else snake.pop();
+}
+function draw(){
+  ctx.fillStyle='#16162a'; ctx.fillRect(0,0,480,480);
+  // grid glow
+  ctx.strokeStyle='rgba(52,211,153,.06)';
+  for(let i=0;i<=N;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,480);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(480,i*CELL);ctx.stroke();}
+  // food
+  ctx.fillStyle='#f43f5e'; ctx.shadowColor='#f43f5e'; ctx.shadowBlur=12;
+  ctx.beginPath();ctx.arc(food.x*CELL+CELL/2,food.y*CELL+CELL/2,CELL*0.42,0,7);ctx.fill();
+  ctx.shadowBlur=0;
+  // snake
+  snake.forEach((s,i)=>{
+    ctx.fillStyle=i===0?'#34d399':'#22d3ee';
+    const x=s.x*CELL+2,y=s.y*CELL+2,w=CELL-4;
+    ctx.beginPath();ctx.roundRect(x,y,w,w,5);ctx.fill();
+  });
+  if(over){
+    ctx.fillStyle='rgba(8,8,20,.78)';ctx.fillRect(0,0,480,480);
+    ctx.fillStyle='#f43f5e';ctx.font='700 34px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('Game Over',240,232);ctx.fillStyle='#e7e7f5';ctx.font='600 16px system-ui';
+    ctx.fillText('Score '+score+' · tap New Game',240,268);
+  }
+}
+function loop(t){
+  if(over)return;
+  acc+=t-last; last=t;
+  while(acc>=STEP_MS){acc-=STEP_MS;step();if(over)break;}
+  draw();
+  requestAnimationFrame(loop);
+}
+addEventListener('keydown',e=>{
+  const m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+  if(m[e.key]){
+    e.preventDefault();
+    const [x,y]=m[e.key];
+    if(!(x===-dir.x&&y===-dir.y)&&!(x===dir.x&&y===dir.y))nextDir={x,y};
+  }
+});
+let tsx=0,tsy=0;
+canvas.addEventListener('touchstart',e=>{const t=e.touches[0];tsx=t.clientX;tsy=t.clientY;},{passive:true});
+canvas.addEventListener('touchend',e=>{
+  const t=e.changedTouches[0],dx=t.clientX-tsx,dy=t.clientY-tsy;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+  const nx=Math.abs(dx)>Math.abs(dy)?(dx>0?1:-1):0, ny=Math.abs(dy)>Math.abs(dx)?(dy>0?1:-1):0;
+  if(nx&&!(nx===-dir.x))nextDir={x:nx,y:0};
+  if(ny&&!(ny===-dir.y))nextDir={x:0,y:ny};
+},{passive:true});
+document.getElementById('restart').addEventListener('click',init);
+init();
+</script>
+</body></html>
