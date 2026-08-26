@@ -23,7 +23,7 @@ canvas{width:100%;height:auto;aspect-ratio:1/1;background:#16162a;border:1px sol
 </head>
 <body>
 <div class="wrap">
-<div class="bar"><h1>Candy Match 3</h1><div class="score">Score: <span id="score">0</span></div><button id="restartTop" class="btn">↻ Restart</button></div>
+<div class="bar"><h1>Candy Match 3</h1><div class="score">Score: <span id="score">0</span></div><button id="muteBtn" class="btn" style="padding:8px 10px">BGM</button><button id="restartTop" class="btn">↻ Restart</button></div>
 <div class="stage">
 <canvas id="c" width="480" height="480"></canvas>
 <div id="start" class="overlay">▶ Tap to Play<small>click or tap to start</small></div>
@@ -47,12 +47,36 @@ const engine = function (g) {
   canvas.addEventListener("click", e => { const rect = canvas.getBoundingClientRect(); const c = ((e.clientX - rect.left) / rect.width * W / CELL) | 0; const r = ((e.clientY - rect.top) / rect.height * W / CELL) | 0; if (r >= 0 && r < N && c >= 0 && c < N) tap(c, r); });
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
 };
-let __started=false;
+const __slug="match-3-candy";
+let __started=false,__mutedPref=false,__bgm=null;
 const __startEl=document.getElementById('start');
 const __restartTop=document.getElementById('restartTop');
-function __begin(){ if(__started)return; __started=true; if(__startEl)__startEl.style.display='none'; engine(CFG); }
+const __muteEl=document.getElementById('muteBtn');
+function __syncMute(){ if(__muteEl)__muteEl.textContent=__mutedPref?'Muted':'BGM'; }
+function __initBgm(){
+  const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+  let ac; try{ ac=new AC(); }catch(e){ return; }
+  const master=ac.createGain(); master.gain.value=0; master.connect(ac.destination);
+  const roots=[110,123.47,130.81,146.83,164.81];
+  let s=2166136261; for(let i=0;i<__slug.length;i++){ s^=__slug.charCodeAt(i); s=Math.imul(s,16777619);} s=s>>>0;
+  const base=roots[s%roots.length]; const scale=[1,1.2,1.333,1.5,1.8,2];
+  const drone=ac.createOscillator(); drone.type='sine'; drone.frequency.value=base/2;
+  const dg=ac.createGain(); dg.gain.value=0.035; drone.connect(dg); dg.connect(master); drone.start();
+  if(__mutedPref) master.gain.value=0; else master.gain.linearRampToValueAtTime(0.09, ac.currentTime+0.8);
+  const timer=setInterval(()=>{ try{ const t=ac.currentTime;
+    const note=base*scale[Math.floor(Math.random()*scale.length)]*(Math.random()<0.5?1:2);
+    const o=ac.createOscillator(); o.type='triangle'; o.frequency.value=note;
+    const eg=ac.createGain(); eg.gain.setValueAtTime(0,t); eg.gain.linearRampToValueAtTime(0.5,t+0.01); eg.gain.exponentialRampToValueAtTime(0.0001,t+0.22);
+    o.connect(eg); eg.connect(master); o.start(t); o.stop(t+0.24);
+  }catch(e){} },300);
+  __bgm={ ac, master, timer,
+    apply(){ try{ master.gain.cancelScheduledValues(ac.currentTime); master.gain.linearRampToValueAtTime(__mutedPref?0:0.09, ac.currentTime+0.15); }catch(e){} },
+    toggle(){ __mutedPref=!__mutedPref; __syncMute(); this.apply(); } };
+}
+function __begin(){ if(__started)return; __started=true; if(__startEl)__startEl.style.display='none'; __initBgm(); if(__bgm&&__bgm.ac.state==='suspended')__bgm.ac.resume(); engine(CFG); }
 if(__startEl)__startEl.addEventListener('click',__begin);
 if(__restartTop)__restartTop.addEventListener('click',()=>{ const r=document.getElementById('restart'); if(r)r.click(); });
+if(__muteEl)__muteEl.addEventListener('click',()=>{ __mutedPref=!__mutedPref; __syncMute(); if(__bgm)__bgm.apply(); });
 canvas.addEventListener('touchmove',e=>{const t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:t.clientX,clientY:t.clientY,bubbles:true}));},{passive:true});
 canvas.addEventListener('touchstart',e=>{const t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:t.clientX,clientY:t.clientY,bubbles:true}));},{passive:true});
 </script>
