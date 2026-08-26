@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Voxel Survival — MC Animations + Skinned</title>
+<style>
+  html,body{height:100%;margin:0;overflow:hidden;background:#000;font-family:system-ui,Segoe UI,Roboto}
+  #hud{position:fixed;left:12px;top:12px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7);font-size:14px;z-index:2}
+  #help{position:fixed;left:12px;bottom:12px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7);font-size:12px;z-index:2}
+  .cross{position:fixed;left:50%;top:50%;width:16px;height:16px;transform:translate(-50%,-50%)}
+  .cross::before,.cross::after{content:"";position:absolute;background:#fff}
+  .cross::before{left:7px;top:0;width:2px;height:16px}
+  .cross::after{top:7px;left:0;width:16px;height:2px}
+  #warn{position:fixed;right:12px;top:12px;color:#ffbdbd;background:#2a0000;padding:6px 10px;border-radius:6px;display:none}
+</style>
+</head>
+<body>
+<div id="hud">Mode: <span id="mode">1P</span> • Pos: <span id="pos">0,0,0</span></div>
+<div id="help">WASD move • Arrows look • Space jump • Shift run • V toggle 1P/3P</div>
+<div id="warn">Skin failed to load — using fallback colors</div>
+<div class="cross" aria-hidden="true"></div>
+<script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+<script>
+// ---------- Renderer & Scene ----------
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+document.body.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x87ceeb);
+scene.fog=new THREE.FogExp2(0x7ec0ee,0.008);
+
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,1000);
+const amb=new THREE.AmbientLight(0xffffff,.65); scene.add(amb);
+const sun=new THREE.DirectionalLight(0xffffff,.95); sun.position.set(30,60,20); scene.add(sun);
+
+window.addEventListener('resize',()=>{
+  renderer.setSize(innerWidth,innerHeight);
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// ---------- Simple World ----------
+const groundMat=new THREE.MeshLambertMaterial({color:0x7aa35a});
+const ground=new THREE.Mesh(new THREE.BoxGeometry(200,2,200),groundMat);
+ground.position.set(0,-1,0); ground.receiveShadow=true; scene.add(ground);
+
+const boxMat=new THREE.MeshLambertMaterial({color:0x888888});
+for(let i=0;i<30;i++){
+  const b=new THREE.Mesh(new THREE.BoxGeometry(2,2,2),boxMat);
+  b.position.set((Math.random()-0.5)*80,0,(Math.random()-0.5)*80);
+  scene.add(b);
+}
+
+// ---------- Player (exact MC scale) ----------
+const player={
+  pos:new THREE.Vector3(0,2,6),
+  vel:new THREE.Vector3(),
+  yaw:0, pitch:0,
+  height:1.62, // MC eye height (~1.62), total model height = 1.8
+  onGround:false,
+  speed:5.0, run:8.5
+};
+let thirdPerson=false;
+
+// ---------- Controls ----------
+const input={f:false,b:false,l:false,r:false,run:false,jump:false,lookL:false,lookR:false,lookU:false,lookD:false};
+window.addEventListener('keydown',e=>{
+  if(e.metaKey||e.ctrlKey){e.preventDefault();e.stopPropagation();}
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  switch(e.code){
+    case 'KeyW': input.f=true; break; case 'KeyS': input.b=true; break;
+    case 'KeyA': input.l=true; break; case 'KeyD': input.r=true; break;
+    case 'ShiftLeft': case 'ShiftRight': input.run=true; break;
+    case 'Space': input.jump=true; break;
+    case 'ArrowLeft': input.lookL=true; break; case 'ArrowRight': input.lookR=true; break;
+    case 'ArrowUp': input.lookU=true; break; case 'ArrowDown': input.lookD=true; break;
+    case 'KeyV': thirdPerson=!thirdPerson; document.getElementById('mode').textContent=thirdPerson?'3P':'1P'; break;
+  }
+});
+window.addEventListener('keyup',e=>{
+  switch(e.code){
+    case 'KeyW': input.f=false; break; case 'KeyS': input.b=false; break;
+    case 'KeyA': input.l=false; break; case 'KeyD': input.r=false; break;
+    case 'ShiftLeft': case 'ShiftRight': input.run=false; break;
+    case 'Space': input.jump=false; break;
+    case 'ArrowLeft': input.lookL=false; break; case 'ArrowRight': input.lookR=false; break;
+    case 'ArrowUp': input.lookU=false; break; case 'ArrowDown': input.lookD=false; break;
+  }
+});
+
+// ---------- MC scale helpers ----------
+const unitPerPx = 1.8/32; // 32px tall -> 1.8 blocks
+const S = {
+  head: { w:8*unitPerPx, h:8*unitPerPx, d:8*unitPerPx },
+  body: { w:8*unitPerPx, h:12*unitPerPx, d:4*unitPerPx },
+  limb: { w:4*unitPerPx, h:12*unitPerPx, d:4*unitPerPx }
+};
+
+// ---------- UV rects (classic 64×64) ----------
+const UV = {
+  head:{ px:[0,8,8,8], nx:[16,8,8,8], py:[8,0,8,8], ny:[16,0,8,8], pz:[8,8,8,8], nz:[24,8,8,8] },
+  head2:{ px:[32,8,8,8], nx:[48,8,8,8], py:[40,0,8,8], ny:[48,0,8,8], pz:[40,8,8,8], nz:[56,8,8,8] },
+  body:{ px:[16,20,4,12], nx:[28,20,4,12], py:[20,16,8,4], ny:[28,16,8,4], pz:[20,20,8,12], nz:[32,20,8,12] },
+  arm :{ px:[40,20,4,12], nx:[48,20,4,12], py:[44,16,4,4], ny:[48,16,4,4], pz:[44,20,4,12], nz:[52,20,4,12] },
+  leg :{ px:[0,20,4,12],  nx:[8,20,4,12],  py:[4,16,4,4],  ny:[8,16,4,4],  pz:[4,20,4,12],  nz:[12,20,4,12] }
+};
+
+// ---------- Skin loader (CORS-safe) ----------
+const skinURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAFhElEQVR4Xu1a328UVRjdR6UUKJFIKL90oa4Vs1TwgRItUvlljMYSjVIDBAzUloZkg5pIDFWJUE3UpyaQiokJSWM0PPjrwcAjT/2fPufc2TN++82dGcruTrfbOcnJ3L33u7f3nPvd2dm5LZUyMLitV8Bdm59wV5bBHRt65JNj1VTa8VYcKLi6Y72jNgCEyMlDe+Wbk/ujK9hVBlD8wJY1iQaUy+UGoq4rDODq223Auq43QItFBoB6O6wKA3ziswwYqwx0jwEU/vzWta6Mu781wMeuMYDCNZkZ+ivPRztex6HSv0ZAiHquv8eJfam8QV7cGbK6s1de2B7eBypbe9yNELGogwGMQx/0xRho57g0Kuk5ws4nd2gDwD3b1zkhELhvV5+7kvh8eHCjjAxucnEwhDHogzqOow1Ie46w88kdbtKbw1ULhQfC+rHS/Nwrf89ekvvf1+Th3Izc/64WlK/Ib5+ekv27N7oYxKIP+kbbJRgTY0Nw2nOEnU/ucCu1JUjlbevCVe0PtwLK1Wf75NcvLsif16fd9feZaZmvfSj/ztZk/uM3HRGDWPRBX5QxFsbE56znCDuf3MFUDbfBWik//aTceH9Y5s8fkeHKU048MPbKrPx19aITjzIAUxCDWPRBX4yhx9RiuT30drDzyR3RZIMVC9O2T66PDcncmdfk5qkDgbij8sfVc/LPV7Xo6+3BzUvyy+QxmQme+RGDWPRBX4zB1acBPvEdYwDTHml7brQqP02+LbfPvx79oPnx9Ggg8JB8dvjlBv5w+lX58uQBF4NY9EFfjOG2QH07UHzSc4SdT+7grzeKnr943K3otx8clCvHq3L5yB6ZHh10YsHP39onX7970BFlxCD254kTru/tj94Ir/XxaCQzgKRxdj7LjvdOLIpmpVJpoI2PYXEx9jAUPRQFbaWzZ9OZhYWFcBwwKGNLvjO0O7ra8CWjFQbYR2KyJQZQfJ2r24AgA7R49zeaRSsMsKnfzi3QtAF7KzUBB54Zd9ejw3cbqNts+/DQrJSuXfuf4+NSunVLSnfuuBsmvip580Sdo44HUQdR5L17Ifk5KZ4xtp39ySxQ4OMYALo/OjEREmVOvG5CJJ4T0vGgFq3JcXQsBbIPDbXtj2NAksCsdu8EOUlMEBmhRep40E5Ykyusx7eG2XY7RhayBGa1u7TnBFDWf5wG6LqkeMZBoC5bgTqb8soAHYN9rxkJITF5LZpl1utYGmBFq/54KCNvBA9f+P2hiTodY9ut3hh8BlCczoBEA7QYmKEN8AnThnEL+PrUU91nwNzl8Ugg61tqgM2AtPaYILv63LPWAKatR7Q2RIuzBuDqM8DV12Os3hgoLElgpgF2D2YZYL8FfLEJBtgVtgb4tojVG8OjGJDWHjOAgqwofk6L91CLSzLAZsiSDBgZGREwSSDrGTc1NdXASBCuzABSr36SATqeMSwH/bQ4a4AzQRnAdr1FrN4YKCxJYFa73iK4WgNBd7NUBuibKttdDLdJQN6EkwygSF+GLJsBvgxqMCEQlhbPGF1nV7jhBhjQd49YkgEFChQoUKBAgQIFChQoUKBAgQLNounDVbwVauXhZ95o2gBz/r/6DNAZsNiGf4BoN1pqwEIb/gWm1eDLTf2WV9O+BOXbXjJ6nU7qV+m+/yewZwfLjUc1IKndidLnBDz9pRG6XZ8krSQD0tpjBmhxMCGtvSsNaPX5f7uhxfkEWgPs8bo+1PCd7fkOPjTtfHIHxfmOupZiQNbRV0cbkJbiWe3WAH2sZQ1ghvBYbEUZQNp2e7hJYVEmqNX3bRE7n9yRJTCr3aa4zwBtUscZwFPjJIGsTzpdbhB/Jr7HG7JDGdQxWyDr+Dyr3bfCOgtWhQGkE6pucK5sMqTVBvwH+QeX13iz8VkAAAAASUVORK5CYII=";
+
+const loader = new THREE.TextureLoader();
+let skinTex = null;
+
+loader.load(
+  skinURL,
+  (t)=>{
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    t.generateMipmaps = false;
+    t.colorSpace = THREE.SRGBColorSpace;
+    skinTex = t;
+    buildSteve(); // only build once texture is ready
+  },
+  undefined,
+  ()=>{
+    document.getElementById('warn').style.display='block';
+    buildSteve(true); // fallback colors
+  }
+);
+
+// ---------- materials/UV helpers ----------
+function slicedFaceMats(rects, transparent=false){
+  // rects: [px,nx,py,ny,pz,nz] each as [x,y,w,h] in skin pixels
+  if(!skinTex){
+    // solid color fallback (keeps grouping order)
+    const m = new THREE.MeshLambertMaterial({color:0xffffff, transparent:false});
+    return [m,m.clone(),m.clone(),m.clone(),m.clone(),m.clone()];
+  }
+  return rects.map(([x,y,w,h])=>{
+    const tex = skinTex.clone();
+    tex.needsUpdate = true;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    // flip handled by offset math
+    tex.repeat.set(w/64, h/64);
+    tex.offset.set(x/64, 1 - (y+h)/64);
+    return new THREE.MeshBasicMaterial({map:tex, transparent});
+  });
+}
+function addEdges(mesh){
+  const e=new THREE.EdgesGeometry(mesh.geometry);
+  const line=new THREE.LineSegments(e,new THREE.LineBasicMaterial({color:0x000000,opacity:0.25,transparent:true}));
+  mesh.add(line);
+  return mesh;
+}
+
+// ---------- Steve rig (created after texture is ready) ----------
+const steve = new THREE.Group();
+let rig=null; // store pivots/parts
+
+function buildSteve(useFallback=false){
+  // clear existing
+  for(let i=steve.children.length-1;i>=0;i--) steve.remove(steve.children[i]);
+
+  // legs
+  const legLPivot=new THREE.Group(); legLPivot.position.set(-S.limb.w*0.5, S.limb.h, 0);
+  const legRPivot=new THREE.Group(); legRPivot.position.set( S.limb.w*0.5, S.limb.h, 0);
+
+  const gLeg = new THREE.BoxGeometry(S.limb.w, S.limb.h, S.limb.d);
+  const mLeg = useFallback
+    ? new THREE.MeshLambertMaterial({color:0x2b3b73})
+    : slicedFaceMats([UV.leg.px,UV.leg.nx,UV.leg.py,UV.leg.ny,UV.leg.pz,UV.leg.nz], false);
+  const legL = addEdges(new THREE.Mesh(gLeg, mLeg));
+  const legR = addEdges(new THREE.Mesh(gLeg, Array.isArray(mLeg)?mLeg.map(m=>m.clone()):mLeg.clone()));
+  legL.position.set(0,-S.limb.h/2,0);
+  legR.position.set(0,-S.limb.h/2,0);
+  legLPivot.add(legL); legRPivot.add(legR);
+
+  // body
+  const gBody = new THREE.BoxGeometry(S.body.w, S.body.h, S.body.d);
+  const mBody = useFallback
+    ? new THREE.MeshLambertMaterial({color:0x3c8dbc})
+    : slicedFaceMats([UV.body.px,UV.body.nx,UV.body.py,UV.body.ny,UV.body.pz,UV.body.nz], false);
+  const body  = addEdges(new THREE.Mesh(gBody, mBody));
+  body.position.set(0, S.limb.h + S.body.h/2, 0);
+
+  // arms
+  const shoulderY = S.limb.h + S.body.h - 0.001;
+  const armOffsetX = S.body.w/2 + S.limb.w/2;
+  const armLPivot=new THREE.Group(); armLPivot.position.set(-armOffsetX, shoulderY, 0);
+  const armRPivot=new THREE.Group(); armRPivot.position.set( armOffsetX, shoulderY, 0);
+
+  const gArm = new THREE.BoxGeometry(S.limb.w, S.limb.h, S.limb.d);
+  const mArm = useFallback
+    ? new THREE.MeshLambertMaterial({color:0xd7b594})
+    : slicedFaceMats([UV.arm.px,UV.arm.nx,UV.arm.py,UV.arm.ny,UV.arm.pz,UV.arm.nz], false);
+  const armL = addEdges(new THREE.Mesh(gArm, mArm));
+  const armR = addEdges(new THREE.Mesh(gArm, Array.isArray(mArm)?mArm.map(m=>m.clone()):mArm.clone()));
+  armL.position.set(0,-S.limb.h/2,0);
+  armR.position.set(0,-S.limb.h/2,0);
+  armLPivot.add(armL); armRPivot.add(armR);
+
+  // head + hat (only hat transparent)
+  const headPivot=new THREE.Group(); headPivot.position.set(0, S.limb.h + S.body.h, 0);
+  const gHead = new THREE.BoxGeometry(S.head.w, S.head.h, S.head.d);
+  const mHead = useFallback
+    ? new THREE.MeshLambertMaterial({color:0xd7b594})
+    : slicedFaceMats([UV.head.px,UV.head.nx,UV.head.py,UV.head.ny,UV.head.pz,UV.head.nz], false);
+  const head  = addEdges(new THREE.Mesh(gHead, mHead)); head.position.set(0, S.head.h/2, 0);
+
+  const gHat  = new THREE.BoxGeometry(S.head.w*1.05, S.head.h*1.05, S.head.d*1.05);
+  const mHat  = useFallback
+    ? new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0}) // no overlay in fallback
+    : slicedFaceMats([UV.head2.px,UV.head2.nx,UV.head2.py,UV.head2.ny,UV.head2.pz,UV.head2.nz], true);
+  const hat = new THREE.Mesh(gHat, mHat); hat.position.set(0, S.head.h/2, 0);
+
+  headPivot.add(head,hat);
+
+  // assemble
+  steve.add(legLPivot,legRPivot,body,armLPivot,armRPivot,headPivot);
+  scene.add(steve);
+  steve.visible=false;
+
+  rig={body,headPivot,head,armLPivot,armRPivot,legLPivot,legRPivot};
+}
+
+// ---------- Camera ----------
+let movePhase=0;
+
+function setCamera1P(){
+  const baseEye=player.pos.clone(); baseEye.y+=player.height;
+  const horizSpeed=Math.hypot(player.vel.x,player.vel.z);
+  const bobAmp = Math.min(horizSpeed/ player.run, 1) * 0.05;
+  const bobY   = Math.abs(Math.sin(movePhase*2.0))*bobAmp;
+  const bobX   = Math.sin(movePhase)*bobAmp*0.4;
+  const eye=baseEye.add(new THREE.Vector3(bobX,bobY,0));
+  camera.position.copy(eye);
+  camera.rotation.order='YXZ';
+  camera.rotation.y=player.yaw;
+  camera.rotation.x=player.pitch;
+}
+function setCamera3P(){
+  if(!rig) return;
+  steve.position.copy(player.pos);
+  steve.rotation.y=player.yaw;
+  const headWorld=new THREE.Vector3(); rig.head.getWorldPosition(headWorld);
+  const headDir=new THREE.Vector3(
+    -Math.sin(player.yaw)*Math.cos(player.pitch),
+     Math.sin(player.pitch),
+    -Math.cos(player.yaw)*Math.cos(player.pitch)
+  ).normalize();
+  const dist=3.2;
+  const camPos=headWorld.clone().addScaledVector(headDir,-dist);
+  camera.position.copy(camPos);
+  camera.lookAt(headWorld);
+}
+
+// ---------- Animation ----------
+function animateSteve(dt){
+  if(!steve.visible || !rig) return;
+  const {headPivot,armLPivot,armRPivot,legLPivot,legRPivot,body}=rig;
+
+  headPivot.rotation.order='YXZ';
+  headPivot.rotation.y = 0;
+  headPivot.rotation.x = THREE.MathUtils.clamp(player.pitch, -Math.PI, Math.PI);
+
+  const horizSpeed=Math.hypot(player.vel.x,player.vel.z);
+  const gaitSpeed = THREE.MathUtils.lerp(3.0, 5.5, Math.min(horizSpeed/player.run,1));
+  movePhase += gaitSpeed * dt * (horizSpeed>0.01?1:0);
+
+  const t = performance.now()*0.001;
+  body.position.y = S.limb.h + S.body.h/2 + Math.sin(t*1.3)*0.015;
+
+  const swingAmtBase = 0.9;
+  const runBoost = input.run ? 1.2 : 1.0;
+  const swing = Math.sin(2*movePhase) * swingAmtBase * Math.min(horizSpeed/player.speed,1) * runBoost;
+  const swingOpp = Math.sin(2*movePhase + Math.PI) * swingAmtBase * Math.min(horizSpeed/player.speed,1) * runBoost;
+
+  armLPivot.rotation.set(swing, 0, 0);
+  armRPivot.rotation.set(swingOpp, 0, 0);
+  legLPivot.rotation.set(-swing, 0, 0);
+  legRPivot.rotation.set(-swingOpp, 0, 0);
+}
+
+// ---------- Update Loop ----------
+let last=performance.now();
+function update(dt){
+  // Look
+  const ls=1.6;
+  if(input.lookL) player.yaw += ls*dt;
+  if(input.lookR) player.yaw -= ls*dt;
+  if(input.lookU) player.pitch = Math.min(Math.PI/2-0.01, player.pitch + ls*dt);
+  if(input.lookD) player.pitch = Math.max(-Math.PI/2+0.01, player.pitch - ls*dt);
+
+  // Move
+  const f=(input.f?1:0)-(input.b?1:0);
+  const s=(input.r?1:0)-(input.l?1:0);
+  const forward=new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+  const right  =new THREE.Vector3( Math.cos(player.yaw),0,-Math.sin(player.yaw));
+  const mv=forward.multiplyScalar(f).add(right.multiplyScalar(s));
+  const sp=(input.run?player.run:player.speed);
+  if(mv.lengthSq()>0) mv.normalize().multiplyScalar(sp);
+
+  // Physics
+  player.vel.x = mv.x; player.vel.z = mv.z;
+  player.vel.y += -20*dt;
+  if(input.jump && player.onGround){ player.vel.y = 8.0; player.onGround=false; }
+  const next=player.pos.clone().addScaledVector(player.vel,dt);
+
+  if(next.y < 0){ next.y=0; player.vel.y=0; player.onGround=true; } else { player.onGround=false; }
+  player.pos.copy(next);
+
+  if(!thirdPerson){ steve.visible=false; setCamera1P(); }
+  else { steve.visible=true; setCamera3P(); }
+
+  animateSteve(dt);
+  document.getElementById('pos').textContent =
+    `${player.pos.x.toFixed(1)},${player.pos.y.toFixed(1)},${player.pos.z.toFixed(1)}`;
+}
+function loop(t){
+  const dt=Math.min(0.05,(t-last)/1000);
+  last=t; update(dt); renderer.render(scene,camera); requestAnimationFrame(loop);
+}
+
+// ---------- Start ----------
+(function init(){ camera.rotation.order='YXZ'; requestAnimationFrame(loop); })();
+</script>
+</body>
+</html>

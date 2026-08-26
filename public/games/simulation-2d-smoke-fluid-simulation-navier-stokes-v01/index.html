@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>2D Smoke Fluid Simulation (Navier–Stokes)</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      color: #eee;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    #ui {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      background: rgba(10, 10, 10, 0.9);
+      backdrop-filter: blur(6px);
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+      border-bottom: 1px solid #333;
+    }
+    #ui label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    #ui input[type=range] {
+      width: 140px;
+    }
+    #ui button {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #444;
+      background: #111;
+      color: #eee;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    #ui button:hover {
+      background: #222;
+    }
+    #info {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    canvas {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: 32px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <label>
+      Viscosity
+      <input id="viscSlider" type="range" min="0" max="0.005" step="0.0001" value="0.0008">
+    </label>
+    <label>
+      Inlet speed
+      <input id="speedSlider" type="range" min="5" max="60" step="1" value="20">
+    </label>
+    <label>
+      Smoke rate
+      <input id="smokeSlider" type="range" min="10" max="200" step="5" value="80">
+    </label>
+    <button id="resetBtn">Reset</button>
+    <div id="info">
+      Low speed / high viscosity → laminar. Increase speed or lower viscosity → transitional → turbulent.
+    </div>
+  </div>
+  <canvas id="canvas"></canvas>
+
+  <script>
+    // =======================
+    // Grid & solver parameters
+    // =======================
+    const N = 128;                // Number of interior cells per dimension
+    const ITER = 20;              // Gauss–Seidel iterations
+    const size = (N + 2) * (N + 2);
+
+    // Fields: velocity (u,v) and smoke density
+    let u = new Float32Array(size);
+    let v = new Float32Array(size);
+    let u0 = new Float32Array(size);
+    let v0 = new Float32Array(size);
+    let dens = new Float32Array(size);
+    let dens0 = new Float32Array(size);
+
+    // Parameters controlled by UI
+    let visc = 0.0008;
+    let diff = 0.00001;
+    let inletSpeed = 20.0;
+    let smokeRate = 80.0;
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight - document.getElementById("ui").offsetHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    // Map 2D indices to 1D
+    function IX(i, j) {
+      return i + (N + 2) * j;
+    }
+
+    // =======================
+    // Core fluid solver (Stam-style)
+    // =======================
+
+    function addSource(x, s, dt) {
+      for (let i = 0; i < size; i++) {
+        x[i] += dt * s[i];
+      }
+    }
+
+    function set_bnd(b, x) {
+      // b = 0: scalar; 1: horizontal velocity; 2: vertical velocity
+      for (let i = 1; i <= N; i++) {
+        // Left/right boundaries
+        x[IX(0, i)]     = (b === 1 ? -x[IX(1, i)] : x[IX(1, i)]);
+        x[IX(N + 1, i)] = (b === 1 ? -x[IX(N, i)] : x[IX(N, i)]);
+
+        // Bottom/top boundaries
+        x[IX(i, 0)]     = (b === 2 ? -x[IX(i, 1)] : x[IX(i, 1)]);
+        x[IX(i, N + 1)] = (b === 2 ? -x[IX(i, N)] : x[IX(i, N)]);
+      }
+
+      // Corners
+      x[IX(0, 0)]             = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
+      x[IX(0, N + 1)]         = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
+      x[IX(N + 1, 0)]         = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
+      x[IX(N + 1, N + 1)]     = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
+    }
+
+    function lin_solve(b, x, x0, a, c) {
+      const cRecip = 1.0 / c;
+      for (let k = 0; k < ITER; k++) {
+        for (let j = 1; j <= N; j++) {
+          for (let i = 1; i <= N; i++) {
+            x[IX(i, j)] =
+              (x0[IX(i, j)] +
+                a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] +
+                     x[IX(i, j - 1)] + x[IX(i, j + 1)])) *
+              cRecip;
+          }
+        }
+        set_bnd(b, x);
+      }
+    }
+
+    function diffuse(b, x, x0, diff, dt) {
+      const a = dt * diff * N * N;
+      lin_solve(b, x, x0, a, 1 + 4 * a);
+    }
+
+    function advect(b, d, d0, u, v, dt) {
+      const dt0 = dt * N;
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          let x = i - dt0 * u[IX(i, j)];
+          let y = j - dt0 * v[IX(i, j)];
+
+          if (x < 0.5) x = 0.5;
+          if (x > N + 0.5) x = N + 0.5;
+          if (y < 0.5) y = 0.5;
+          if (y > N + 0.5) y = N + 0.5;
+
+          const i0 = Math.floor(x);
+          const i1 = i0 + 1;
+          const j0 = Math.floor(y);
+          const j1 = j0 + 1;
+
+          const s1 = x - i0;
+          const s0 = 1 - s1;
+          const t1 = y - j0;
+          const t0 = 1 - t1;
+
+          d[IX(i, j)] =
+            s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
+            s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
+        }
+      }
+      set_bnd(b, d);
+    }
+
+    function project(u, v, p, div) {
+      const h = 1.0 / N;
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          div[IX(i, j)] =
+            -0.5 * h * (u[IX(i + 1, j)] - u[IX(i - 1, j)] +
+                        v[IX(i, j + 1)] - v[IX(i, j - 1)]);
+          p[IX(i, j)] = 0;
+        }
+      }
+      set_bnd(0, div);
+      set_bnd(0, p);
+
+      for (let k = 0; k < ITER; k++) {
+        for (let j = 1; j <= N; j++) {
+          for (let i = 1; i <= N; i++) {
+            p[IX(i, j)] =
+              (div[IX(i, j)] +
+               p[IX(i - 1, j)] + p[IX(i + 1, j)] +
+               p[IX(i, j - 1)] + p[IX(i, j + 1)]) / 4;
+          }
+        }
+        set_bnd(0, p);
+      }
+
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          u[IX(i, j)] -= 0.5 * (p[IX(i + 1, j)] - p[IX(i - 1, j)]) / h;
+          v[IX(i, j)] -= 0.5 * (p[IX(i, j + 1)] - p[IX(i, j - 1)]) / h;
+        }
+      }
+
+      set_bnd(1, u);
+      set_bnd(2, v);
+    }
+
+    function vel_step(u, v, u0, v0, visc, dt) {
+      addSource(u, u0, dt);
+      addSource(v, v0, dt);
+
+      // Diffuse velocities (viscosity)
+      diffuse(1, u0, u, visc, dt);
+      diffuse(2, v0, v, visc, dt);
+
+      // Make velocity field divergence-free
+      project(u0, v0, u, v);
+
+      // Advect with self
+      advect(1, u, u0, u0, v0, dt);
+      advect(2, v, v0, u0, v0, dt);
+
+      // Project again to enforce incompressibility
+      project(u, v, u0, v0);
+    }
+
+    function dens_step(dens, dens0, u, v, diff, dt) {
+      addSource(dens, dens0, dt);
+      diffuse(0, dens0, dens, diff, dt);
+      advect(0, dens, dens0, u, v, dt);
+    }
+
+    // =======================
+    // Simulation setup
+    // =======================
+
+    function clearFields() {
+      u.fill(0);
+      v.fill(0);
+      u0.fill(0);
+      v0.fill(0);
+      dens.fill(0);
+      dens0.fill(0);
+    }
+
+    // Add a horizontal inflow of smoke from left boundary near center
+    function injectInletSources(dt) {
+      u0.fill(0);
+      v0.fill(0);
+      dens0.fill(0);
+
+      const jCenter = Math.floor((N + 2) * 0.5);
+      const bandHalfWidth = Math.floor(N * 0.08); // thickness of the jet
+
+      const iInlet = 2; // near the left boundary
+      for (let dj = -bandHalfWidth; dj <= bandHalfWidth; dj++) {
+        const j = jCenter + dj;
+        if (j < 1 || j > N) continue;
+        const idx = IX(iInlet, j);
+
+        // Inlet velocity: to the right
+        u0[idx] = inletSpeed; // magnitude controlled by slider
+        v0[idx] = 0;
+
+        // Smoke source (density)
+        dens0[idx] = smokeRate;
+      }
+
+      // Optional: small upward buoyancy can be added if you want
+      // but here we keep it simple to focus on shear + vortices.
+    }
+
+    // Rendering: map density to grayscale alpha on black background
+    function render() {
+      const w = canvas.width;
+      const h = canvas.height;
+      const cellW = w / N;
+      const cellH = h / N;
+
+      // Draw black background
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw density as smoke
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          const d = dens[IX(i, j)];
+          if (d <= 0) continue;
+          const alpha = Math.min(d * 0.02, 1.0); // scale density to alpha
+          const shade = 255; // white smoke
+          ctx.fillStyle = `rgba(${shade},${shade},${shade},${alpha})`;
+          const x = (i - 1) * cellW;
+          const y = (j - 1) * cellH;
+          ctx.fillRect(x, y, cellW + 0.5, cellH + 0.5);
+        }
+      }
+    }
+
+    // =======================
+    // Animation loop
+    // =======================
+
+    let lastTime = performance.now();
+
+    function stepFrame(now) {
+      const dtMs = now - lastTime;
+      lastTime = now;
+
+      // Use a fixed simulation dt to keep it stable
+      const dt = 0.05;
+
+      injectInletSources(dt);
+
+      vel_step(u, v, u0, v0, visc, dt);
+      dens_step(dens, dens0, u, v, diff, dt);
+
+      render();
+
+      requestAnimationFrame(stepFrame);
+    }
+
+    clearFields();
+    requestAnimationFrame(stepFrame);
+
+    // =======================
+    // UI wiring
+    // =======================
+    const viscSlider = document.getElementById("viscSlider");
+    const speedSlider = document.getElementById("speedSlider");
+    const smokeSlider = document.getElementById("smokeSlider");
+    const resetBtn = document.getElementById("resetBtn");
+
+    viscSlider.addEventListener("input", () => {
+      visc = parseFloat(viscSlider.value);
+    });
+
+    speedSlider.addEventListener("input", () => {
+      inletSpeed = parseFloat(speedSlider.value);
+    });
+
+    smokeSlider.addEventListener("input", () => {
+      smokeRate = parseFloat(smokeSlider.value);
+    });
+
+    resetBtn.addEventListener("click", () => {
+      clearFields();
+    });
+  </script>
+</body>
+</html>

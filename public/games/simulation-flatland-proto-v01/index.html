@@ -1,0 +1,509 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flatland: A Romance of Many Dimensions — First‑Person Line View</title>
+  <style>
+    /*
+      Flatland, seen from within.
+      The player is a line being among lines; we render a 1D horizon of light.
+      All code is self‑contained in this single file.
+    */html, body {
+  height: 100%;
+  margin: 0;
+  background: #000; /* will be overridden each frame with a subtle animated gradient */
+  color: #e6e6e6;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  overflow: hidden;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  /* crisp rendering for the 1D line */
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  cursor: none; /* keep it immersive */
+}
+
+.hud {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: #cfcfcf;
+  opacity: 0.8;
+  user-select: none;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+
+.hud .faint { opacity: 0.6; }
+
+.centerText {
+  position: fixed;
+  top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 11px; color: #d8d8d8; opacity: 0.85; text-align: center;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div class="hud" id="hud"></div>
+  <div class="centerText" id="intro">W/A/S/D or ⌥←/→ &nbsp;—&nbsp; Rotate / Move · C = Color · H = Hum · R = Reset<br/>"We are but lines among lines."</div>  <script>
+    /* ==========================================================
+       FLATLAND — 1D First‑Person Line‑of‑Light Renderer (Canvas)
+       ----------------------------------------------------------
+       – Player is a line in 2D, perceiving only the angular cross‑section.
+       – We ray‑cast across a horizontal FOV; each pixel stores the closest edge hit.
+       – Brightness depends on distance and incidence angle; hue depends on shape type.
+       – Subtle background gradient animates with time and motion.
+       – Optional audio hum responds to proximity.
+       ========================================================== */
+
+    // Canvas and pixel buffer setup
+    const canvas = document.getElementById('view');
+    const ctx = canvas.getContext('2d', { alpha: false });
+
+    // Handle HiDPI cleanly
+    function resize() {
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width = Math.floor(innerWidth * dpr);
+      canvas.height = Math.floor(innerHeight * dpr);
+      canvas.style.width = innerWidth + 'px';
+      canvas.style.height = innerHeight + 'px';
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ----------------------------------------------------------
+    // World / Player state
+    // ----------------------------------------------------------
+
+    const TAU = Math.PI * 2;
+    const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const mix = (c1, c2, t) => [
+      Math.round(lerp(c1[0], c2[0], t)),
+      Math.round(lerp(c1[1], c2[1], t)),
+      Math.round(lerp(c1[2], c2[2], t)),
+    ];
+    const length2 = (x,y)=>Math.hypot(x,y);
+
+    const player = {
+      x: 0,
+      y: 0,
+      a: 0,           // facing angle (radians)
+      fov: Math.PI * 0.66, // ~120° field of view
+      speed: 0.0,
+      rotSpeed: 0.0,
+    };
+
+    // Input handling (WASD / Arrows)
+    const keys = new Set();
+    window.addEventListener('keydown', (e) => {
+      keys.add(e.key.toLowerCase());
+      if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+      // Toggle color rendering & audio
+      if (e.key.toLowerCase()==='c') colorEnabled = !colorEnabled;
+      if (e.key.toLowerCase()==='h') toggleHum();
+      if (e.key.toLowerCase()==='r') initWorld();
+    });
+    window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+    // Difficulty / stylistic toggles
+    let colorEnabled = true;     // C toggles pigment perception
+    let humEnabled = false;      // H toggles audio hum
+
+    // ----------------------------------------------------------
+    // World geometry: shapes defined as edge lists.
+    // Types: triangle (3), square (4), pentagon (5), circle (~N segments)
+    // ----------------------------------------------------------
+
+    const world = { shapes: [] };
+
+    function regularPolygon(cx, cy, r, sides, rotation = 0) {
+      const pts = [];
+      for (let i = 0; i < sides; i++) {
+        const t = rotation + (i / sides) * TAU;
+        pts.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r]);
+      }
+      return pts;
+    }
+
+    function circleApprox(cx, cy, r, segs = 40) {
+      return regularPolygon(cx, cy, r, segs, 0);
+    }
+
+    function toEdges(points) {
+      const edges = [];
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        edges.push({ a, b });
+      }
+      return edges;
+    }
+
+    // Shape palette (type -> base color)
+    const TYPE_COLOR = {
+      triangle: [220, 70, 60],   // reddish
+      square:   [80, 140, 230],  // bluish
+      pentagon: [90, 200, 150],  // sea‑green
+      circle:   [240, 240, 240], // soft white
+    };
+
+    function jitterColor(rgb, amt=8) {
+      return rgb.map(c => clamp(c + (Math.random()*2-1)*amt, 0, 255));
+    }
+
+    function addShape(type, cx, cy, r, rotation=0) {
+      let points;
+      if (type === 'triangle') points = regularPolygon(cx, cy, r, 3, rotation);
+      else if (type === 'square') points = regularPolygon(cx, cy, r, 4, rotation);
+      else if (type === 'pentagon') points = regularPolygon(cx, cy, r, 5, rotation);
+      else if (type === 'circle') points = circleApprox(cx, cy, r, 44);
+      const edges = toEdges(points);
+      world.shapes.push({ type, edges, color: jitterColor(TYPE_COLOR[type], 12), cx, cy, r });
+    }
+
+    // Initialize an atmospheric scene
+    function initWorld() {
+      world.shapes.length = 0;
+
+      // Scatter shapes around the player in a ring‑like field
+      const rng = Math.random;
+      const count = 18 + Math.floor(rng()*8);
+      const types = ['triangle','square','pentagon','circle'];
+      for (let i=0; i<count; i++) {
+        const type = types[Math.floor(rng()*types.length)];
+        const dist = 6 + rng()*22; // meters, roughly
+        const ang  = rng()*TAU;
+        const r    = 0.8 + rng()*2.2;
+        const cx   = Math.cos(ang)*dist;
+        const cy   = Math.sin(ang)*dist;
+        const rot  = rng()*TAU;
+        addShape(type, cx, cy, r, rot);
+      }
+
+      // Also place a quiet cluster nearby for drama
+      addShape('triangle', 4,  2, 1.2, 0.3);
+      addShape('square',  -3, 1.5, 1.4, 0.0);
+      addShape('circle',  2.5,-2.0, 1.3, 0.0);
+
+      // Reset player
+      player.x = 0; player.y = 0; player.a = 0; player.speed = 0; player.rotSpeed = 0;
+
+      fadeInIntro();
+    }
+
+    // ----------------------------------------------------------
+    // Ray/segment intersection for 2D (returns distance t if hit)
+    // Ray: P + t*D (t>=0). Segment: S0 + u*(S1-S0), u in [0,1]
+    // ----------------------------------------------------------
+
+    function raySegment(Px, Py, Dx, Dy, S0x, S0y, S1x, S1y) {
+      const rx = Dx, ry = Dy;
+      const sx = S1x - S0x, sy = S1y - S0y;
+      const denom = rx * sy - ry * sx;
+      if (Math.abs(denom) < 1e-6) return null; // parallel or degenerate
+      const qpx = S0x - Px, qpy = S0y - Py;
+      const t = (qpx * sy - qpy * sx) / denom; // along ray
+      if (t < 0) return null;
+      const u = (qpx * ry - qpy * rx) / denom; // along segment
+      if (u < 0 || u > 1) return null;
+      return t; // distance along ray to intersection point
+    }
+
+    // Incidence weighting: brighter when the ray is near‑perpendicular to the edge
+    function incidence(Dx, Dy, S0x, S0y, S1x, S1y) {
+      const ex = S1x - S0x, ey = S1y - S0y;
+      // Edge normal (rotate edge by +90°)
+      const nx = -ey, ny = ex;
+      const nd = Math.hypot(nx, ny) || 1;
+      const dd = Math.hypot(Dx, Dy) || 1;
+      const cos = (nx*Dx + ny*Dy) / (nd*dd); // how aligned ray is to normal
+      return Math.abs(cos); // |cos| -> 1 is most head‑on (brightest)
+    }
+
+    // ----------------------------------------------------------
+    // Renderer: 1D z‑buffer across the horizon
+    // ----------------------------------------------------------
+
+    function render(timeMs, dt) {
+      const w = canvas.width, h = canvas.height;
+
+      // Animated ambient gradient background (subtle, moodful)
+      const t = timeMs * 0.00015;
+      const speed = Math.hypot(vx, vy);
+      const hueBase = (t*40 + speed*40) % 360;
+      const gTop = hslToRgb((hueBase+180)%360, 8, 6);
+      const gMid = hslToRgb((hueBase+200)%360, 10, 5);
+      const gBot = hslToRgb((hueBase+220)%360, 12, 7);
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0.0, `rgb(${gTop.join(',')})`);
+      grad.addColorStop(0.5, `rgb(${gMid.join(',')})`);
+      grad.addColorStop(1.0, `rgb(${gBot.join(',')})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 1D horizon line thickness (scaled with height)
+      const lineY = Math.floor(h * 0.5);
+      const thickness = Math.max(2, Math.floor(h * 0.012));
+
+      // Create a pixel buffer for the horizon scan
+      const img = ctx.createImageData(w, thickness);
+      const buf = img.data; // RGBA
+
+      // Z‑buffer per column
+      const depth = new Float32Array(w);
+      for (let i = 0; i < w; i++) depth[i] = Infinity;
+
+      const halfFov = player.fov * 0.5;
+
+      // Cast rays across the horizon
+      for (let x = 0; x < w; x++) {
+        const u = (x / (w - 1)) * 2 - 1; // -1 .. +1 across screen
+        const ra = player.a + u * halfFov * 2 * 0.5; // scaled slightly to reduce fisheye
+        const rdx = Math.cos(ra), rdy = Math.sin(ra);
+
+        // For each shape edge, find the nearest intersection
+        let best = null; // { t, color:[r,g,b], weight }
+        for (const s of world.shapes) {
+          for (const e of s.edges) {
+            const [ax, ay] = e.a;
+            const [bx, by] = e.b;
+            const tHit = raySegment(player.x, player.y, rdx, rdy, ax, ay, bx, by);
+            if (tHit == null) continue;
+            if (tHit < 0.001) continue; // ignore self hits
+            if (tHit < depth[x]) {
+              // Base color or monochrome
+              const base = colorEnabled ? s.color : [230,230,230];
+              const angW = Math.pow(incidence(rdx, rdy, ax, ay, bx, by), 0.9); // near‑perp brighter
+              const distW = 1 / (1 + 0.24 * tHit * tHit); // rolloff ~ inverse square-ish
+              const wgt = clamp(angW * distW, 0, 1);
+              depth[x] = tHit;
+              best = { t: tHit, base, weight: wgt };
+            }
+          }
+        }
+
+        if (best) {
+          // Slight bloom by blending with background
+          const glow = clamp(Math.exp(-best.t * 0.22) * 0.9, 0, 1);
+          const col = mix([gMid[0], gMid[1], gMid[2]], best.base, clamp(best.weight*0.95 + glow*0.2, 0, 1));
+          // Write into the horizon buffer (vertical band)
+          for (let y = 0; y < thickness; y++) {
+            const idx = (y * w + x) * 4;
+            buf[idx+0] = col[0];
+            buf[idx+1] = col[1];
+            buf[idx+2] = col[2];
+            buf[idx+3] = 255;
+          }
+        } else {
+          // Empty space: whisper of background
+          for (let y = 0; y < thickness; y++) {
+            const idx = (y * w + x) * 4;
+            const c = gMid; // already a soft mid‑tone
+            buf[idx+0] = c[0];
+            buf[idx+1] = c[1];
+            buf[idx+2] = c[2];
+            buf[idx+3] = 180;
+          }
+        }
+      }
+
+      // Draw the horizon buffer
+      ctx.putImageData(img, 0, lineY - Math.floor(thickness/2));
+
+      // Soft overlay vignette to hold the eye
+      vignette(ctx, w, h);
+
+      // Update HUD (minimally, bottom‑left)
+      if (hudEl) {
+        const nearest = Math.min(...depth);
+        const nearestStr = Number.isFinite(nearest) ? nearest.toFixed(2) + 'm' : '—';
+        hudEl.innerHTML = `⟂ distance: <span class="faint">${nearestStr}</span> · color: <span class="faint">${colorEnabled?'on':'off'}</span> · hum: <span class="faint">${humEnabled?'on':'off'}</span>`;
+      }
+
+      // Drive audio parameters by proximity
+      updateHum(depth);
+    }
+
+    // ----------------------------------------------------------
+    // Movement integration
+    // ----------------------------------------------------------
+
+    let vx = 0, vy = 0; // for background mood
+
+    function step(dt) {
+      // Target speeds from keys
+      const moveForward = keys.has('w') || keys.has('arrowup');
+      const moveBack    = keys.has('s') || keys.has('arrowdown');
+      const rotLeft     = keys.has('a') || keys.has('arrowleft');
+      const rotRight    = keys.has('d') || keys.has('arrowright');
+
+      const targetSpeed = (moveForward? 1:0) + (moveBack? -1:0);
+      const targetRot   = (rotLeft? -1:0) + (rotRight? 1:0);
+
+      // Smooth acceleration/deceleration
+      player.speed    = lerp(player.speed, targetSpeed * 4.0, 0.15);
+      player.rotSpeed = lerp(player.rotSpeed, targetRot * 1.7, 0.12);
+
+      // Integrate rotation
+      player.a = (player.a + player.rotSpeed * dt) % TAU;
+
+      // Integrate translation in facing space
+      const dirx = Math.cos(player.a), diry = Math.sin(player.a);
+      const stepSize = player.speed * dt;
+      const nx = player.x + dirx * stepSize;
+      const ny = player.y + diry * stepSize;
+
+      // Simple collision softness: nudge away if too close to any center
+      let px = nx, py = ny;
+      for (const s of world.shapes) {
+        const dx = px - s.cx, dy = py - s.cy;
+        const d = Math.hypot(dx, dy);
+        const minD = Math.max(0.6, s.r * 0.75);
+        if (d < minD) {
+          const k = (minD - d) * 0.6;
+          if (d > 1e-3) { px += (dx/d) * k; py += (dy/d) * k; }
+        }
+      }
+
+      vx = px - player.x; vy = py - player.y; // last motion (for background hue)
+      player.x = px; player.y = py;
+    }
+
+    // ----------------------------------------------------------
+    // Visual helpers
+    // ----------------------------------------------------------
+
+    function vignette(ctx, w, h) {
+      const g = ctx.createRadialGradient(w*0.5, h*0.5, Math.min(w,h)*0.25, w*0.5, h*0.5, Math.max(w,h)*0.7);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.35)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,w,h);
+    }
+
+    // HSL to RGB for ambiance (s in %, l in %)
+    function hslToRgb(h, s, l) {
+      s/=100; l/=100;
+      const k = n => (n + h/30) % 12;
+      const a = s * Math.min(l, 1 - l);
+      const f = n => l - a * Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n),1)));
+      return [Math.round(255*f(0)), Math.round(255*f(8)), Math.round(255*f(4))];
+    }
+
+    // ----------------------------------------------------------
+    // Audio hum (optional)
+    // ----------------------------------------------------------
+
+    let audio = null; // { ctx, osc, gain }
+
+    function initHum() {
+      if (audio) return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ac = new AudioCtx();
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 80; // base tone
+      gain.gain.value = 0.0;    // start silent
+      osc.connect(gain).connect(ac.destination);
+      osc.start();
+      audio = { ctx: ac, osc, gain };
+    }
+
+    function toggleHum() {
+      if (!humEnabled) { // turning ON
+        initHum();
+        if (audio && audio.ctx.state === 'suspended') audio.ctx.resume();
+        humEnabled = true;
+      } else {           // turning OFF
+        humEnabled = false;
+        if (audio) audio.gain.gain.setTargetAtTime(0.0, audio.ctx.currentTime, 0.1);
+      }
+    }
+
+    function updateHum(depth) {
+      if (!humEnabled || !audio) return;
+      if (audio.ctx.state === 'suspended') return;
+      // Use nearest depth as proxy for proximity
+      let nearest = Infinity;
+      for (let i=0;i<depth.length;i++) if (depth[i] < nearest) nearest = depth[i];
+      if (!Number.isFinite(nearest)) nearest = 99;
+      const t = audio.ctx.currentTime;
+      const freq = 60 + 420 * Math.exp(-nearest * 0.25); // nearer -> higher
+      const vol  = 0.02 + 0.18 * Math.exp(-nearest * 0.35); // nearer -> louder
+      audio.osc.frequency.setTargetAtTime(freq, t, 0.08);
+      audio.gain.gain.setTargetAtTime(vol, t, 0.12);
+    }
+
+    // ----------------------------------------------------------
+    // Intro text fade
+    // ----------------------------------------------------------
+
+    const introEl = document.getElementById('intro');
+    let introTimer = 0;
+    function fadeInIntro() { introTimer = 5.0; introEl.style.opacity = 0.85; }
+
+    function updateIntro(dt) {
+      if (introTimer > 0) {
+        introTimer -= dt;
+        introEl.style.opacity = String(clamp(introTimer/5.0, 0, 0.85));
+      } else {
+        introEl.style.opacity = '0';
+      }
+    }
+
+    // ----------------------------------------------------------
+    // Main loop
+    // ----------------------------------------------------------
+
+    const hudEl = document.getElementById('hud');
+    let last = performance.now();
+
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      step(dt);
+      render(now, dt);
+      updateIntro(dt);
+      requestAnimationFrame(frame);
+    }
+
+    // Bootstrap
+    initWorld();
+    requestAnimationFrame(frame);
+
+    // ----------------------------------------------------------
+    // Optional: click once to enable audio after a user gesture
+    // ----------------------------------------------------------
+
+    window.addEventListener('pointerdown', () => { if (humEnabled) toggleHum(), toggleHum(); }, { once: true });
+
+    // ----------------------------------------------------------
+    // Notes on perception model (for the curious):
+    // ----------------------------------------------------------
+    // 1. Each pixel column represents a unique gaze direction within FOV.
+    // 2. We intersect that ray with every edge in the world; nearest hit wins.
+    // 3. Brightness = f(distance) * f(incidence). Incidence is |cos(theta)| where
+    //    theta is the angle between the ray and the edge normal. Thus faces that
+    //    are more “head‑on” appear brighter, aligned faces dimmer — echoing how
+    //    Flatlanders judge each other by the vanishing of edges.
+    // 4. Shapes carry archetypal pigments by type; press C to disable pigments
+    //    for a more austere, difficulty‑up aesthetic (monochrome).
+    // 5. The ambient gradient breathes very gently with motion and time to keep
+    //    the scene from feeling static while staying minimal.
+  </script></body>
+</html>

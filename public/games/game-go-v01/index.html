@@ -1,0 +1,951 @@
+<!doctype html>
+
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>바둑 (Go) — 정식 계가/사석 처리</title>
+  <style>
+    :root{
+      --bg:#0b0f17;
+      --text:#e8eefc;
+      --muted:#a9b4cc;
+      --wood1:#caa56a;
+      --wood2:#b98f4f;
+      --accent:#7aa2ff;
+      --danger:#ff6b6b;
+      --ok:#54d18d;
+      --shadow: 0 14px 40px rgba(0,0,0,.38);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+      background: radial-gradient(1200px 700px at 20% 10%, #15223a 0%, var(--bg) 55%, #080a10 100%);
+      color:var(--text);
+    }.wrap{
+  max-width: 1120px;
+  margin: 28px auto;
+  padding: 0 16px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1.4fr .9fr;
+  align-items: start;
+}
+@media (max-width: 980px){
+  .wrap{grid-template-columns:1fr}
+}
+
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.boardCard{ padding: 14px; }
+
+header{
+  display:flex; align-items:center; justify-content:space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+header h1{
+  margin:0;
+  font-size: 16px;
+  letter-spacing:.2px;
+  font-weight: 800;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+}
+header h1 .dot{width:10px;height:10px;border-radius:99px;background:var(--accent);box-shadow:0 0 22px rgba(122,162,255,.65)}
+header .sub{font-size: 12px;color:var(--muted)}
+
+.panel{ padding: 14px 16px; display:flex; flex-direction:column; gap: 12px; }
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+
+button{
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform .05s ease, background .15s ease, border-color .15s ease;
+  user-select:none;
+}
+button:hover{background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.18)}
+button:active{transform: translateY(1px)}
+button.primary{background: rgba(122,162,255,.14); border-color: rgba(122,162,255,.35)}
+button.primary:hover{background: rgba(122,162,255,.20)}
+button.ok{background: rgba(84,209,141,.14); border-color: rgba(84,209,141,.35)}
+button.ok:hover{background: rgba(84,209,141,.20)}
+button.danger{background: rgba(255,107,107,.12); border-color: rgba(255,107,107,.35)}
+button.danger:hover{background: rgba(255,107,107,.18)}
+
+select, input[type="number"]{
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 12px;
+  outline: none;
+}
+
+.statGrid{ display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat{ padding: 12px; border-radius: 14px; background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.08); }
+.stat .k{font-size:12px;color:var(--muted); margin-bottom:4px}
+.stat .v{font-size: 15px; font-weight: 800}
+
+.pill{
+  display:inline-flex; align-items:center; gap:8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.16);
+  font-size: 12px;
+  color: var(--muted);
+}
+.turnDot{width:10px;height:10px;border-radius:999px}
+
+.log{
+  height: 240px;
+  overflow:auto;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.18);
+  border: 1px solid rgba(255,255,255,.08);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.log b{color: var(--text)}
+
+.hint{font-size: 12px; color: var(--muted); line-height:1.55}
+.hint b{color: var(--text)}
+
+.canvasWrap{
+  position: relative;
+  width: 100%;
+  /* 모바일에서도 항상 정사각형 유지 */
+  aspect-ratio: 1 / 1;
+  border-radius: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(700px 600px at 30% 30%, rgba(255,255,255,.16), rgba(255,255,255,0) 65%),
+    linear-gradient(135deg, rgba(255,255,255,.06), rgba(0,0,0,.16));
+  border: 1px solid rgba(255,255,255,.10);
+}
+/* 구형 모바일 브라우저 fallback */
+@supports not (aspect-ratio: 1 / 1){
+  .canvasWrap::before{
+    content:"";
+    display:block;
+    padding-top:100%;
+  }
+  .canvasWrap > canvas{
+    position:absolute;
+    inset:0;
+  }
+}
+canvas{width:100%;height:100%; display:block}
+
+.toast{
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.55);
+  border: 1px solid rgba(255,255,255,.16);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events:none;
+  transition: opacity .18s ease, transform .18s ease;
+  z-index: 1000;
+}
+.toast.show{opacity:1; transform: translateX(-50%) translateY(0)}
+.toast.hide{opacity:0; transform: translateX(-50%) translateY(-8px)}
+
+.badge{
+  display:inline-flex; align-items:center; gap:8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(84,209,141,.10);
+  border: 1px solid rgba(84,209,141,.25);
+  color: rgba(230,255,243,.95);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.divider{height:1px;background:rgba(255,255,255,.08); margin: 4px 0}
+
+  </style>
+</head>
+<body>
+  <div class="toast" id="toast"></div>  <div class="wrap"><div class="card boardCard">
+  <div class="canvasWrap">
+    <canvas id="board" aria-label="바둑판"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <header>
+    <h1><span class="dot"></span> 바둑 (Go)</h1>
+    <div class="sub" id="modeSub">대국 모드</div>
+  </header>
+  <div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <div class="pill" id="turnPill"><span class="turnDot" id="turnDot"></span><span id="turnText">흑 차례</span></div>
+      <div class="pill" title="Positional superko 판정용 해시(표시용).">hash: <span id="koText">-</span></div>
+    </div>
+
+    <div class="statGrid">
+      <div class="stat"><div class="k">흑 포획</div><div class="v"><span id="capB">0</span></div></div>
+      <div class="stat"><div class="k">백 포획</div><div class="v"><span id="capW">0</span></div></div>
+      <div class="stat"><div class="k">착수</div><div class="v"><span id="moveNo">1</span></div></div>
+      <div class="stat"><div class="k">패스 연속</div><div class="v"><span id="passStreak">0</span></div></div>
+    </div>
+
+    <div class="row">
+      <label class="pill" style="gap:10px">
+        판 크기
+        <select id="sizeSel" aria-label="판 크기">
+          <option value="9">9×9</option>
+          <option value="13">13×13</option>
+          <option value="19" selected>19×19</option>
+        </select>
+      </label>
+      <label class="pill" style="gap:10px">
+        코미
+        <input id="komiInp" type="number" step="0.5" value="6.5" style="width:86px" aria-label="코미" />
+      </label>
+      <label class="pill" style="gap:10px">
+        계가
+        <select id="rulesetSel" aria-label="계가 방식">
+          <option value="japanese" selected>일본(집/영역)</option>
+          <option value="chinese">중국(면적)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="row" id="playButtons">
+      <button class="primary" id="passBtn">패스</button>
+      <button id="undoBtn">되돌리기</button>
+      <button class="danger" id="resetBtn">새 게임</button>
+      <button class="ok" id="enterScoreBtn">계가 시작</button>
+    </div>
+
+    <div class="row" id="scoreButtons" style="display:none">
+      <span class="badge">계가 모드</span>
+      <button class="ok" id="calcScoreBtn">점수 계산</button>
+      <button id="resumeBtn">대국 계속</button>
+      <button class="danger" id="finalizeBtn">종료 확정</button>
+      <button id="undoScoreBtn" title="사석 표시/점수 계산을 되돌립니다.">되돌리기</button>
+    </div>
+
+    <div class="hint" id="hintPlay">
+      • 룰: <b>포획</b>, <b>자살수 금지</b>, <b>Positional superko</b>(반복 국면 금지) 적용.
+      • <b>계가 시작</b>을 누르거나, <b>연속 2패스</b> 후 자동으로 계가 모드로 전환합니다.
+    </div>
+    <div class="hint" id="hintScore" style="display:none">
+      • <b>사석 제거</b>: 돌을 클릭하면 그 돌과 연결된 <b>그룹 전체</b>가 사석으로 토글됩니다(반투명 + X).
+      • 일본룰: <b>집(영역) + 포획수 + 사석(추가 포획) + 코미</b>
+      • 중국룰: <b>(살아있는 돌 수 + 집) + 코미</b> (사석은 판에서 제거된 것으로 간주)
+    </div>
+
+    <div class="divider"></div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+  </div><script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function toast(msg){
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.remove('hide');
+    t.classList.add('show');
+    clearTimeout(toast._tm);
+    toast._tm = setTimeout(() => {
+      t.classList.remove('show');
+      t.classList.add('hide');
+    }, 1600);
+  }
+
+  function logLine(html){
+    const log = $("log");
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // --- State ---
+  let N = 19;
+  let komi = 6.5;
+  let board = [];
+  let toPlay = 1;
+  let captures = {1:0, 2:0};
+  let moveNumber = 1;
+  let passStreak = 0;
+  let lastMove = null;
+
+  let mode = 'play'; // 'play' | 'scoring' | 'final'
+  let dead = [];
+
+  // hashing
+  let zTable = null;
+  let currHash = 0n;
+  let seenHashes = new Set();
+
+  // undo history
+  let history = []; // {flat, deadFlat, toPlay, captures, moveNumber, passStreak, lastMove, currHash, seenArr, mode}
+
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  // --- Hashing ---
+  function rng64(){
+    const buf = new Uint32Array(2);
+    (crypto?.getRandomValues?.(buf) ?? (()=>{buf[0]=Math.random()*2**32;buf[1]=Math.random()*2**32;})());
+    return (BigInt(buf[0]) << 32n) ^ BigInt(buf[1]);
+  }
+
+  function initZobrist(){
+    zTable = [[],[]];
+    for(let c=0;c<2;c++){
+      zTable[c] = new Array(N*N);
+      for(let i=0;i<N*N;i++) zTable[c][i] = rng64();
+    }
+  }
+
+  function idx(x,y){ return y*N + x; }
+  function inBounds(x,y){ return x>=0 && y>=0 && x<N && y<N; }
+
+  function boardToFlat(){
+    const flat = new Uint8Array(N*N);
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++) flat[idx(x,y)] = board[x][y];
+    return flat;
+  }
+  function flatToBoard(flat){
+    const b = Array.from({length:N}, () => new Uint8Array(N));
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++) b[x][y] = flat[idx(x,y)];
+    return b;
+  }
+
+  function deadToFlat(){
+    const flat = new Uint8Array(N*N);
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++) flat[idx(x,y)] = dead[x][y];
+    return flat;
+  }
+  function flatToDead(flat){
+    const d = Array.from({length:N}, () => new Uint8Array(N));
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++) d[x][y] = flat[idx(x,y)];
+    return d;
+  }
+
+  function computeHash(){
+    let h = 0n;
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+      const v = board[x][y];
+      if(v===1) h ^= zTable[0][idx(x,y)];
+      else if(v===2) h ^= zTable[1][idx(x,y)];
+    }
+    return h;
+  }
+
+  function saveHistory(){
+    history.push({
+      flat: boardToFlat(),
+      deadFlat: deadToFlat(),
+      toPlay,
+      captures: {1:captures[1], 2:captures[2]},
+      moveNumber,
+      passStreak,
+      lastMove: lastMove ? {x:lastMove.x, y:lastMove.y} : null,
+      currHash,
+      seenArr: Array.from(seenHashes),
+      mode,
+    });
+  }
+
+  function restoreFrom(e){
+    board = flatToBoard(e.flat);
+    dead = flatToDead(e.deadFlat);
+    toPlay = e.toPlay;
+    captures = {1:e.captures[1], 2:e.captures[2]};
+    moveNumber = e.moveNumber;
+    passStreak = e.passStreak;
+    lastMove = e.lastMove;
+    currHash = e.currHash;
+    seenHashes = new Set(e.seenArr);
+    mode = e.mode;
+  }
+
+  function undo(){
+    const e = history.pop();
+    if(!e){ toast("되돌릴 수 없습니다."); return; }
+    restoreFrom(e);
+    logLine(`<span style="color:#a9b4cc">되돌림</span>`);
+    updateUI();
+    resizeAndDraw();
+  }
+
+  // --- Groups / captures ---
+  function floodGroup(x0,y0, useDead=false){
+    const color = board[x0][y0];
+    if(!color) return {stones:[], liberties:0};
+
+    const seen = new Uint8Array(N*N);
+    const q = [[x0,y0]];
+    seen[idx(x0,y0)] = 1;
+
+    const stones = [];
+    const libs = new Set();
+
+    const cellValue = (x,y) => {
+      const v = board[x][y];
+      if(useDead && v && dead[x][y]) return 0;
+      return v;
+    };
+
+    while(q.length){
+      const [x,y] = q.pop();
+      stones.push([x,y]);
+      for(const [dx,dy] of dirs){
+        const nx=x+dx, ny=y+dy;
+        if(!inBounds(nx,ny)) continue;
+        const v = cellValue(nx,ny);
+        if(v===0){
+          libs.add(idx(nx,ny));
+        } else if(v===color){
+          const i = idx(nx,ny);
+          if(!seen[i]){ seen[i]=1; q.push([nx,ny]); }
+        }
+      }
+    }
+
+    return {stones, liberties: libs.size};
+  }
+
+  function removeStones(stones){
+    for(const [x,y] of stones) board[x][y]=0;
+  }
+
+  function tryPlay(x,y){
+    if(mode!=='play') return {ok:false, msg:"계가 모드에서는 착수할 수 없습니다."};
+    if(!inBounds(x,y)) return {ok:false, msg:"판 밖입니다."};
+    if(board[x][y]!==0) return {ok:false, msg:"이미 돌이 있습니다."};
+
+    saveHistory();
+
+    const me = toPlay;
+    const opp = (me===1?2:1);
+
+    board[x][y]=me;
+
+    // captures
+    let totalCaptured = 0;
+    let captured = [];
+    for(const [dx,dy] of dirs){
+      const nx=x+dx, ny=y+dy;
+      if(!inBounds(nx,ny)) continue;
+      if(board[nx][ny]!==opp) continue;
+      const g = floodGroup(nx,ny,false);
+      if(g.liberties===0){
+        totalCaptured += g.stones.length;
+        captured.push(...g.stones);
+      }
+    }
+    if(totalCaptured){
+      removeStones(captured);
+      captures[me] += totalCaptured;
+    }
+
+    // suicide
+    const my = floodGroup(x,y,false);
+    if(my.liberties===0){
+      const e = history.pop();
+      restoreFrom(e);
+      return {ok:false, msg:"자살수는 둘 수 없습니다."};
+    }
+
+    // positional superko
+    const newHash = computeHash();
+    const key = newHash.toString();
+    if(seenHashes.has(key)){
+      const e = history.pop();
+      restoreFrom(e);
+      return {ok:false, msg:"슈퍼코(superko) — 이전 국면을 반복할 수 없습니다."};
+    }
+
+    currHash = newHash;
+    seenHashes.add(key);
+
+    lastMove = {x,y};
+    passStreak = 0;
+
+    logLine(`<b>${me===1?"흑":"백"}</b> ${toCoords(x,y)} 착수${totalCaptured?` — 포획 ${totalCaptured}`:""}`);
+
+    toPlay = opp;
+    moveNumber++;
+    return {ok:true};
+  }
+
+  function pass(){
+    if(mode!=='play') return;
+    saveHistory();
+
+    const me = toPlay;
+    toPlay = (me===1?2:1);
+    lastMove = null;
+    passStreak++;
+    moveNumber++;
+
+    logLine(`<b>${me===1?"흑":"백"}</b> 패스`);
+
+    if(passStreak>=2){
+      logLine(`<b style="color:#a9b4cc">연속 2패스</b> — 계가 모드로 전환합니다.`);
+      enterScoring(true);
+    }
+  }
+
+  // --- Scoring mode ---
+  function enterScoring(auto=false){
+    if(mode==='final') return;
+    saveHistory();
+    mode = 'scoring';
+    dead = Array.from({length:N}, () => new Uint8Array(N));
+    toast(auto?"계가 모드: 사석을 표시하세요":"계가 모드로 전환");
+    logLine(`<b style="color:rgba(84,209,141,.95)">계가 모드</b> — 사석(죽은 돌)을 클릭으로 토글하세요.`);
+    updateUI();
+    resizeAndDraw();
+  }
+
+  function resumePlay(){
+    if(mode!=='scoring') return;
+    // undo the enterScoring snapshot
+    undo();
+    toast("대국 모드로 복귀");
+  }
+
+  function toggleDeadAt(x,y){
+    if(mode!=='scoring') return;
+    if(!inBounds(x,y)) return;
+    if(!board[x][y]) return;
+
+    saveHistory();
+
+    const g = floodGroup(x,y,false);
+    const newVal = dead[x][y] ? 0 : 1;
+    for(const [sx,sy] of g.stones) dead[sx][sy] = newVal;
+
+    logLine(`<span style="color:#a9b4cc">사석 표시</span> — ${board[x][y]===1?"흑":"백"} 그룹 ${newVal?"죽음(제거)":"살아있음"}`);
+    updateUI();
+    resizeAndDraw();
+  }
+
+  function getCountsForScoring(){
+    // treat dead stones as empty
+    const getCell = (x,y) => {
+      const v = board[x][y];
+      if(v && dead[x][y]) return 0;
+      return v;
+    };
+
+    let stonesAliveB = 0, stonesAliveW = 0;
+    let deadB = 0, deadW = 0;
+
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+      const v = board[x][y];
+      if(v===1){ if(dead[x][y]) deadB++; else stonesAliveB++; }
+      if(v===2){ if(dead[x][y]) deadW++; else stonesAliveW++; }
+    }
+
+    // territory
+    const seen = new Uint8Array(N*N);
+    let territoryB = 0, territoryW = 0;
+
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+      if(getCell(x,y)!==0) continue;
+      const i0 = idx(x,y);
+      if(seen[i0]) continue;
+
+      const q = [[x,y]];
+      seen[i0]=1;
+      const adj = new Set();
+      let cnt = 0;
+
+      while(q.length){
+        const [cx,cy] = q.pop();
+        cnt++;
+        for(const [dx,dy] of dirs){
+          const nx=cx+dx, ny=cy+dy;
+          if(!inBounds(nx,ny)) continue;
+          const v = getCell(nx,ny);
+          if(v===0){
+            const ii = idx(nx,ny);
+            if(!seen[ii]){ seen[ii]=1; q.push([nx,ny]); }
+          } else {
+            adj.add(v);
+          }
+        }
+      }
+
+      if(adj.size===1){
+        const owner = [...adj][0];
+        if(owner===1) territoryB += cnt;
+        if(owner===2) territoryW += cnt;
+      }
+    }
+
+    return {territoryB, territoryW, stonesAliveB, stonesAliveW, deadB, deadW};
+  }
+
+  function computeScore(){
+    const ruleset = $("rulesetSel").value;
+    const komiNow = Number($("komiInp").value || komi);
+    const {territoryB, territoryW, stonesAliveB, stonesAliveW, deadB, deadW} = getCountsForScoring();
+
+    let black=0, white=0;
+    if(ruleset==='japanese'){
+      black = territoryB + captures[1] + deadW;
+      white = territoryW + captures[2] + deadB + komiNow;
+      const diff = black - white;
+      const winner = diff>0 ? `흑 ${diff.toFixed(1)} 집` : `백 ${(-diff).toFixed(1)} 집`;
+      const summary = `일본룰 — 흑(${territoryB}집 + 포획${captures[1]} + 사석${deadW})=${black}, `+
+                      `백(${territoryW}집 + 포획${captures[2]} + 사석${deadB} + 코미${komiNow.toFixed(1)})=${white.toFixed(1)} → ${winner}`;
+      return {winner, summary};
+    } else {
+      black = stonesAliveB + territoryB;
+      white = stonesAliveW + territoryW + komiNow;
+      const diff = black - white;
+      const winner = diff>0 ? `흑 ${diff.toFixed(1)} 점` : `백 ${(-diff).toFixed(1)} 점`;
+      const summary = `중국룰 — 흑(돌${stonesAliveB}+집${territoryB})=${black}, `+
+                      `백(돌${stonesAliveW}+집${territoryW}+코미${komiNow.toFixed(1)})=${white.toFixed(1)} → ${winner}`;
+      return {winner, summary};
+    }
+  }
+
+  function calcScore(){
+    if(mode!=='scoring') return;
+    const res = computeScore();
+    logLine(`<b>점수 계산</b> — ${res.summary}`);
+    toast(res.winner);
+  }
+
+  function finalize(){
+    if(mode!=='scoring') return;
+    mode = 'final';
+    const res = computeScore();
+    logLine(`<b style="color:rgba(84,209,141,.95)">종료 확정</b> — ${res.summary}`);
+    toast("대국 종료(확정)");
+    updateUI();
+    resizeAndDraw();
+  }
+
+  // --- Coordinates ---
+  const letters = "ABCDEFGHJKLMNOPQRST";
+  function toCoords(x,y){
+    const col = letters[x] ?? "?";
+    const row = (N - y).toString();
+    return col + row;
+  }
+
+  // --- Render ---
+  const canvas = $("board");
+  const ctx = canvas.getContext('2d');
+  let geo = {pad: 26, cell: 30, sizePx: 600, stoneR: 13, starR: 3, ox:0, oy:0};
+  let hover = null;
+
+  function starPoints(n){
+    if(n===19) return [[3,3],[3,9],[3,15],[9,3],[9,9],[9,15],[15,3],[15,9],[15,15]];
+    if(n===13) return [[3,3],[3,6],[3,9],[6,3],[6,6],[6,9],[9,3],[9,6],[9,9]];
+    if(n===9)  return [[2,2],[2,4],[2,6],[4,2],[4,4],[4,6],[6,2],[6,4],[6,6]];
+    const s = Math.floor(n/3), c = Math.floor(n/2);
+    return [[s,s],[s,n-1-s],[n-1-s,s],[n-1-s,n-1-s],[c,c]];
+  }
+
+  function drawStone(x,y,color,isGhost=false,isDead=false){
+    const {ox,oy,cell,stoneR} = geo;
+    const px = ox + x*cell;
+    const py = oy + y*cell;
+
+    ctx.save();
+    ctx.translate(px,py);
+
+    if(isDead) ctx.globalAlpha *= 0.35;
+
+    // shadow
+    ctx.beginPath();
+    ctx.arc(stoneR*0.08, stoneR*0.10, stoneR*0.98, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(0,0,0,.25)";
+    ctx.fill();
+
+    const g = ctx.createRadialGradient(-stoneR*0.35,-stoneR*0.35, stoneR*0.2, 0,0, stoneR*1.4);
+    if(color===1){
+      g.addColorStop(0, isGhost?"rgba(90,90,90,.9)":"#3a3a3a");
+      g.addColorStop(0.45, isGhost?"rgba(30,30,30,.9)":"#121212");
+      g.addColorStop(1, isGhost?"rgba(10,10,10,.9)":"#000000");
+    }else{
+      g.addColorStop(0, isGhost?"rgba(255,255,255,.95)":"#ffffff");
+      g.addColorStop(0.55, isGhost?"rgba(230,230,230,.95)":"#e9e9e9");
+      g.addColorStop(1, isGhost?"rgba(200,200,200,.95)":"#bfbfbf");
+    }
+
+    ctx.beginPath();
+    ctx.arc(0,0,stoneR,0,Math.PI*2);
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    ctx.strokeStyle = color===1 ? "rgba(255,255,255,.10)" : "rgba(0,0,0,.18)";
+    ctx.lineWidth = Math.max(1, stoneR*0.08);
+    ctx.stroke();
+
+    ctx.globalAlpha *= (color===1 ? 0.35 : 0.55);
+    ctx.beginPath();
+    ctx.arc(-stoneR*0.25, -stoneR*0.28, stoneR*0.42, 0, Math.PI*2);
+    ctx.fillStyle = "white";
+    ctx.fill();
+
+    if(isDead){
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = "rgba(255,0,0,.55)";
+      ctx.lineWidth = Math.max(2, stoneR*0.12);
+      ctx.beginPath();
+      ctx.moveTo(-stoneR*0.55, -stoneR*0.55);
+      ctx.lineTo( stoneR*0.55,  stoneR*0.55);
+      ctx.moveTo( stoneR*0.55, -stoneR*0.55);
+      ctx.lineTo(-stoneR*0.55,  stoneR*0.55);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+    function resizeAndDraw(){
+    const wrap = canvas.parentElement;
+    const rect = wrap.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+
+    // 항상 짧은 변 기준으로 정사각형
+    const sizeCss = Math.floor(Math.min(rect.width, rect.height));
+    const size = Math.max(280, sizeCss);
+
+    canvas.width  = Math.floor(size * dpr);
+    canvas.height = Math.floor(size * dpr);
+
+    geo.sizePx = canvas.width;
+    const pad = Math.floor(geo.sizePx * 0.06);
+    geo.pad = clamp(pad, 22*dpr, 36*dpr);
+    geo.cell = (geo.sizePx - 2*geo.pad) / (N-1);
+    geo.stoneR = geo.cell * 0.44;
+    geo.starR = Math.max(2*dpr, geo.cell * 0.11);
+    geo.ox = geo.pad;
+    geo.oy = geo.pad;
+
+    draw();
+  }
+
+  function draw(){
+    const {sizePx, cell, ox, oy} = geo;
+    ctx.clearRect(0,0,sizePx,sizePx);
+
+    const grad = ctx.createLinearGradient(0,0,sizePx,sizePx);
+    grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--wood1').trim());
+    grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--wood2').trim());
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,sizePx,sizePx);
+
+    // grid
+    ctx.strokeStyle = "rgba(0,0,0,.55)";
+    ctx.lineWidth = Math.max(1, Math.floor((window.devicePixelRatio||1)));
+    for(let i=0;i<N;i++){
+      const x = ox + i*cell;
+      const y = oy + i*cell;
+      ctx.beginPath(); ctx.moveTo(x, oy); ctx.lineTo(x, oy + (N-1)*cell); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ox, y); ctx.lineTo(ox + (N-1)*cell, y); ctx.stroke();
+    }
+
+    // stars
+    ctx.fillStyle = "rgba(0,0,0,.70)";
+    for(const [sx,sy] of starPoints(N)){
+      const px = ox + sx*cell;
+      const py = oy + sy*cell;
+      ctx.beginPath();
+      ctx.arc(px,py,geo.starR,0,Math.PI*2);
+      ctx.fill();
+    }
+
+    // stones
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+      const v = board[x][y];
+      if(!v) continue;
+      const isDead = (mode!=='play') && dead[x][y];
+      drawStone(x,y,v,false,isDead);
+    }
+
+    // last move (play only)
+    if(mode==='play' && lastMove){
+      const {x,y} = lastMove;
+      const px = ox + x*cell;
+      const py = oy + y*cell;
+      ctx.save();
+      ctx.strokeStyle = toPlay===1 ? "rgba(255,255,255,.9)" : "rgba(0,0,0,.75)";
+      ctx.lineWidth = Math.max(2, geo.stoneR*0.14);
+      ctx.beginPath();
+      ctx.arc(px,py,geo.stoneR*0.35,0,Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // hover ghost (play only)
+    if(mode==='play' && hover && inBounds(hover.x,hover.y) && board[hover.x][hover.y]===0){
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      drawStone(hover.x,hover.y,toPlay,true,false);
+      ctx.restore();
+    }
+
+    // scoring hover highlight
+    if(mode==='scoring' && hover && inBounds(hover.x,hover.y) && board[hover.x][hover.y]){
+      const g = floodGroup(hover.x,hover.y,false);
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = "rgba(0,0,0,.9)";
+      for(const [sx,sy] of g.stones){
+        const px = ox + sx*cell;
+        const py = oy + sy*cell;
+        ctx.beginPath();
+        ctx.arc(px,py,geo.stoneR*1.02,0,Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  function canvasToBoardXY(evt){
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const x = (evt.clientX - rect.left) * dpr;
+    const y = (evt.clientY - rect.top) * dpr;
+
+    const {ox,oy,cell} = geo;
+    const gx = (x - ox) / cell;
+    const gy = (y - oy) / cell;
+    const ix = Math.round(gx);
+    const iy = Math.round(gy);
+
+    const px = ox + ix*cell;
+    const py = oy + iy*cell;
+    const dist = Math.hypot(x-px, y-py);
+    const ok = dist <= geo.cell*0.45;
+    return {ix,iy, ok};
+  }
+
+  // --- UI ---
+  function updateUI(){
+    const isBlack = toPlay===1;
+    $("turnText").textContent = isBlack ? "흑 차례" : "백 차례";
+    $("turnDot").style.background = isBlack ? "#111" : "#f3f3f3";
+    $("turnDot").style.boxShadow = isBlack ? "0 0 0 1px rgba(255,255,255,.12)" : "0 0 0 1px rgba(0,0,0,.28)";
+
+    $("capB").textContent = captures[1];
+    $("capW").textContent = captures[2];
+    $("moveNo").textContent = moveNumber;
+    $("passStreak").textContent = passStreak;
+
+    const short = (currHash & ((1n<<32n)-1n)).toString(16).padStart(8,'0');
+    $("koText").textContent = short;
+
+    $("playButtons").style.display = (mode==='play') ? "flex" : "none";
+    $("scoreButtons").style.display = (mode==='scoring') ? "flex" : "none";
+    $("hintPlay").style.display = (mode==='play') ? "block" : "none";
+    $("hintScore").style.display = (mode==='scoring' || mode==='final') ? "block" : "none";
+
+    if(mode==='play') $("modeSub").textContent = "대국 모드";
+    else if(mode==='scoring') $("modeSub").textContent = "계가 모드 (사석 표시)";
+    else $("modeSub").textContent = "대국 종료(확정)";
+  }
+
+  // --- Events ---
+  canvas.addEventListener('mousemove', (evt) => {
+    const {ix,iy,ok} = canvasToBoardXY(evt);
+    hover = (ok && inBounds(ix,iy)) ? {x:ix,y:iy} : null;
+    draw();
+  });
+  canvas.addEventListener('mouseleave', () => { hover=null; draw(); });
+
+  canvas.addEventListener('click', (evt) => {
+    const {ix,iy,ok} = canvasToBoardXY(evt);
+    if(!ok || !inBounds(ix,iy)) return;
+
+    if(mode==='play'){
+      const r = tryPlay(ix,iy);
+      if(!r.ok){ toast(r.msg); return; }
+      updateUI();
+      resizeAndDraw();
+    } else if(mode==='scoring'){
+      toggleDeadAt(ix,iy);
+    }
+  });
+
+  $("passBtn").addEventListener('click', () => { pass(); updateUI(); resizeAndDraw(); });
+  $("undoBtn").addEventListener('click', () => undo());
+  $("resetBtn").addEventListener('click', () => resetGame(Number($("sizeSel").value)));
+  $("enterScoreBtn").addEventListener('click', () => enterScoring(false));
+
+  $("calcScoreBtn").addEventListener('click', () => calcScore());
+  $("resumeBtn").addEventListener('click', () => resumePlay());
+  $("finalizeBtn").addEventListener('click', () => finalize());
+  $("undoScoreBtn").addEventListener('click', () => undo());
+
+  $("sizeSel").addEventListener('change', () => resetGame(Number($("sizeSel").value)));
+  $("komiInp").addEventListener('change', () => { komi = Number($("komiInp").value||komi); logLine(`<span style="color:#a9b4cc">코미 변경</span> → ${komi.toFixed(1)}`); });
+  $("rulesetSel").addEventListener('change', () => { logLine(`<span style="color:#a9b4cc">계가 방식</span> → ${$("rulesetSel").value==='japanese'?'일본(집/영역)':'중국(면적)'}`); });
+
+  window.addEventListener('resize', resizeAndDraw);
+
+  // --- Reset ---
+  function resetGame(newN=N){
+    N = newN;
+    komi = Number($("komiInp").value || 6.5);
+    initZobrist();
+    board = Array.from({length:N}, () => new Uint8Array(N));
+    dead = Array.from({length:N}, () => new Uint8Array(N));
+
+    toPlay = 1;
+    captures = {1:0, 2:0};
+    moveNumber = 1;
+    passStreak = 0;
+    lastMove = null;
+
+    mode = 'play';
+    history = [];
+
+    currHash = computeHash();
+    seenHashes = new Set();
+    seenHashes.add(currHash.toString());
+
+    $("log").innerHTML = "";
+    logLine("<b>새 게임 시작</b> — " + N + "×" + N + ", 코미 " + komi.toFixed(1));
+
+    updateUI();
+    // 레이아웃이 잡힌 후 사이즈를 맞추기 위해 두 번 호출
+    requestAnimationFrame(() => { resizeAndDraw(); requestAnimationFrame(resizeAndDraw); });
+  }
+
+  resetGame(19);
+})();
+</script></body>
+</html>

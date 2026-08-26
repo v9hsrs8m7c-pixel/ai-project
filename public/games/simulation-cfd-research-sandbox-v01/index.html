@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CFD Research Sandbox</title>
+  <style>
+    body {
+      background: #0d0d0d;
+      color: #e0e0e0;
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      gap: 10px;
+    }
+    h1 { font-size: 1.3rem; margin-bottom: 4px; }
+    canvas {
+      border: 1px solid #333;
+      background: #000;
+      border-radius: 8px;
+      touch-action: none;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+    label { display: flex; align-items: center; gap: 5px; }
+    input[type="range"] { width: 100px; }
+    button {
+      background: #3ea6ff;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { background: #57b3ff; }
+    .diag {
+      font-size: 0.85rem;
+      background: #111;
+      border-radius: 6px;
+      padding: 6px 10px;
+      line-height: 1.4;
+      min-width: 280px;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <h1>CFD Research Sandbox</h1>
+  <canvas id="simCanvas" width="512" height="512"></canvas>
+
+  <div class="controls">
+    <label>Viscosity
+      <input id="visc" type="range" min="0" max="0.005" step="0.0001" value="0.0001">
+    </label>
+    <label>Diffusion
+      <input id="diff" type="range" min="0" max="0.005" step="0.0001" value="0.0001">
+    </label>
+
+    <button id="pause">Pause</button>
+    <button id="clear">Clear</button>
+
+    <label><input type="checkbox" id="showVectors" checked> Vectors</label>
+    <label><input type="checkbox" id="showGrid"> Grid</label>
+    <label><input type="checkbox" id="showDiag" checked> Diagnostics</label>
+    <!-- This is the main toggle between old (density) and new (vorticity) view -->
+    <label><input type="checkbox" id="viewMode"> Show Vorticity</label>
+  </div>
+
+  <div class="diag" id="diagnostics"></div>
+
+  <script>
+    // --- Core simulation setup ---
+    const N = 64;
+    const iter = 4;
+    const size = (N + 2) * (N + 2);
+    const dt = 0.1;
+    let diff = 0.0001, visc = 0.0001, running = true;
+
+    function IX(i, j) { return i + (N + 2) * j; }
+
+    let u = new Float32Array(size), v = new Float32Array(size);
+    let u_prev = new Float32Array(size), v_prev = new Float32Array(size);
+    let dens = new Float32Array(size), dens_prev = new Float32Array(size);
+    let vort = new Float32Array(size);
+
+    function set_bnd(b, x) {
+      for (let i = 1; i <= N; i++) {
+        x[IX(0, i)]     = b === 1 ? -x[IX(1, i)]   : x[IX(1, i)];
+        x[IX(N + 1, i)] = b === 1 ? -x[IX(N, i)]   : x[IX(N, i)];
+        x[IX(i, 0)]     = b === 2 ? -x[IX(i, 1)]   : x[IX(i, 1)];
+        x[IX(i, N + 1)] = b === 2 ? -x[IX(i, N)]   : x[IX(i, N)];
+      }
+      x[IX(0, 0)]           = 0.5 * (x[IX(1, 0)]     + x[IX(0, 1)]);
+      x[IX(0, N + 1)]       = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
+      x[IX(N + 1, 0)]       = 0.5 * (x[IX(N, 0)]     + x[IX(N + 1, 1)]);
+      x[IX(N + 1, N + 1)]   = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
+    }
+
+    function lin_solve(b, x, x0, a, c) {
+      for (let k = 0; k < iter; k++) {
+        for (let j = 1; j <= N; j++) {
+          for (let i = 1; i <= N; i++) {
+            x[IX(i, j)] =
+              (x0[IX(i, j)] + a * (
+                x[IX(i - 1, j)] +
+                x[IX(i + 1, j)] +
+                x[IX(i, j - 1)] +
+                x[IX(i, j + 1)]
+              )) / c;
+          }
+        }
+        set_bnd(b, x);
+      }
+    }
+
+    function diffuse(b, x, x0, diff, dt) {
+      const a = dt * diff * N * N;
+      lin_solve(b, x, x0, a, 1 + 4 * a);
+    }
+
+    function advect(b, d, d0, u, v, dt) {
+      const dt0 = dt * N;
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          let x = i - dt0 * u[IX(i, j)];
+          let y = j - dt0 * v[IX(i, j)];
+          if (x < 0.5) x = 0.5;
+          if (x > N + 0.5) x = N + 0.5;
+          if (y < 0.5) y = 0.5;
+          if (y > N + 0.5) y = N + 0.5;
+
+          const i0 = Math.floor(x), i1 = i0 + 1;
+          const j0 = Math.floor(y), j1 = j0 + 1;
+          const s1 = x - i0, s0 = 1 - s1;
+          const t1 = y - j0, t0 = 1 - t1;
+
+          d[IX(i, j)] =
+            s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
+            s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
+        }
+      }
+      set_bnd(b, d);
+    }
+
+    function project(u, v, p, div) {
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          div[IX(i, j)] =
+            -0.5 * (
+              u[IX(i + 1, j)] - u[IX(i - 1, j)] +
+              v[IX(i, j + 1)] - v[IX(i, j - 1)]
+            ) / N;
+          p[IX(i, j)] = 0;
+        }
+      }
+      set_bnd(0, div);
+      set_bnd(0, p);
+      lin_solve(0, p, div, 1, 4);
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          u[IX(i, j)] -= 0.5 * N * (p[IX(i + 1, j)] - p[IX(i - 1, j)]);
+          v[IX(i, j)] -= 0.5 * N * (p[IX(i, j + 1)] - p[IX(i, j - 1)]);
+        }
+      }
+      set_bnd(1, u);
+      set_bnd(2, v);
+    }
+
+    function add_source(x, s, dt) {
+      for (let i = 0; i < size; i++) x[i] += dt * s[i];
+    }
+
+    function vel_step(u, v, u0, v0, visc, dt) {
+      add_source(u, u0, dt);
+      add_source(v, v0, dt);
+      [u0, u] = [u, u0]; diffuse(1, u, u0, visc, dt);
+      [v0, v] = [v, v0]; diffuse(2, v, v0, visc, dt);
+      project(u, v, u0, v0);
+      [u0, u] = [u, u0]; [v0, v] = [v, v0];
+      advect(1, u, u0, u0, v0, dt);
+      advect(2, v, v0, u0, v0, dt);
+      project(u, v, u0, v0);
+    }
+
+    function dens_step(x, x0, u, v, diff, dt) {
+      add_source(x, x0, dt);
+      [x0, x] = [x, x0]; diffuse(0, x, x0, diff, dt);
+      [x0, x] = [x, x0]; advect(0, x, x0, u, v, dt);
+    }
+
+    // Vorticity ω = ∂v/∂x − ∂u/∂y
+    function computeVorticity() {
+      let maxAbs = 1e-8;
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          const dv_dx = (v[IX(i + 1, j)] - v[IX(i - 1, j)]) * 0.5 * N;
+          const du_dy = (u[IX(i, j + 1)] - u[IX(i, j - 1)]) * 0.5 * N;
+          const w = dv_dx - du_dy;
+          vort[IX(i, j)] = w;
+          if (Math.abs(w) > maxAbs) maxAbs = Math.abs(w);
+        }
+      }
+      return maxAbs;
+    }
+
+    // --- Rendering ---
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const showVectors = document.getElementById('showVectors');
+    const showGrid = document.getElementById('showGrid');
+    const showDiag = document.getElementById('showDiag');
+    const viewMode = document.getElementById('viewMode');
+    const diagnostics = document.getElementById('diagnostics');
+
+    function render() {
+      const cellW = canvas.width / N;
+      const cellH = canvas.height / N;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const img = ctx.createImageData(canvas.width, canvas.height);
+      const data = img.data;
+      let maxW = 1;
+
+      if (viewMode.checked) {
+        // When toggled, use vorticity computation
+        maxW = computeVorticity();
+      }
+
+      for (let j = 0; j < N; j++) {
+        for (let i = 0; i < N; i++) {
+          const idxField = IX(i + 1, j + 1);
+          let r, g, b;
+
+          if (viewMode.checked) {
+            // Vorticity → blue–white–red colormap
+            const w = vort[idxField] / maxW;
+            const t = 0.5 * (w + 1); // [-1,1] → [0,1]
+
+            if (t <= 0.5) {
+              const s = t / 0.5;  // [0,0.5] → [0,1]
+              r = 255 * s;
+              g = 255 * s;
+              b = 255;
+            } else {
+              const s = (t - 0.5) / 0.5; // [0.5,1] → [0,1]
+              r = 255;
+              g = 255 * (1 - s);
+              b = 255 * (1 - s);
+            }
+          } else {
+            // Original black & white density
+            const d = Math.min(255, dens[idxField] * 255);
+            r = g = b = d;
+          }
+
+          const xStart = Math.floor(i * cellW);
+          const yStart = Math.floor(j * cellH);
+          const xEnd = Math.floor((i + 1) * cellW);
+          const yEnd = Math.floor((j + 1) * cellH);
+
+          for (let y = yStart; y < yEnd; y++) {
+            for (let x = xStart; x < xEnd; x++) {
+              const di = (x + y * canvas.width) * 4;
+              data[di]     = r;
+              data[di + 1] = g;
+              data[di + 2] = b;
+              data[di + 3] = 255;
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(img, 0, 0);
+
+      if (showGrid.checked) drawGrid();
+      if (showVectors.checked) drawVectors();
+    }
+
+    function drawGrid() {
+      const cw = canvas.width / N;
+      const ch = canvas.height / N;
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) {
+        ctx.moveTo(i * cw, 0);
+        ctx.lineTo(i * cw, canvas.height);
+      }
+      for (let j = 0; j <= N; j++) {
+        ctx.moveTo(0, j * ch);
+        ctx.lineTo(canvas.width, j * ch);
+      }
+      ctx.stroke();
+    }
+
+    function drawVectors() {
+      const cw = canvas.width / N;
+      const ch = canvas.height / N;
+      ctx.strokeStyle = 'rgba(0,255,255,0.6)';
+      for (let j = 1; j <= N; j += 2) {
+        for (let i = 1; i <= N; i += 2) {
+          const x = (i - 0.5) * cw;
+          const y = (j - 0.5) * ch;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + u[IX(i, j)] * 5, y + v[IX(i, j)] * 5);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // --- Diagnostics ---
+    function updateDiagnostics() {
+      if (!showDiag.checked) {
+        diagnostics.textContent = '';
+        return;
+      }
+      let totalDiv = 0, totalKE = 0, maxVel = 0, count = 0;
+      for (let j = 1; j <= N; j++) {
+        for (let i = 1; i <= N; i++) {
+          const du_dx = u[IX(i + 1, j)] - u[IX(i - 1, j)];
+          const dv_dy = v[IX(i, j + 1)] - v[IX(i, j - 1)];
+          const div = du_dx + dv_dy;
+          totalDiv += Math.abs(div);
+          const vel = Math.sqrt(u[IX(i, j)] ** 2 + v[IX(i, j)] ** 2);
+          totalKE += vel * vel;
+          if (vel > maxVel) maxVel = vel;
+          count++;
+        }
+      }
+      diagnostics.textContent =
+        `Avg |div u|: ${(totalDiv / count).toExponential(2)}\n` +
+        `Kinetic Energy: ${totalKE.toExponential(2)}\n` +
+        `Max Velocity: ${maxVel.toFixed(3)}`;
+    }
+
+    // --- Interaction ---
+    let isMouseDown = false, prev = { x: 0, y: 0 };
+
+    function getCell(e) {
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      const i = Math.min(N, Math.max(1, Math.floor((x / canvas.width) * N) + 1));
+      const j = Math.min(N, Math.max(1, Math.floor((y / canvas.height) * N) + 1));
+      return { i, j, x, y };
+    }
+
+    canvas.addEventListener('mousedown', e => {
+      isMouseDown = true;
+      const { x, y } = getCell(e);
+      prev = { x, y };
+    });
+    canvas.addEventListener('mouseup', () => { isMouseDown = false; });
+    canvas.addEventListener('mouseleave', () => { isMouseDown = false; });
+
+    canvas.addEventListener('mousemove', e => {
+      if (!isMouseDown) return;
+      const { i, j, x, y } = getCell(e);
+      dens_prev[IX(i, j)] += 50;
+      const dx = x - prev.x, dy = y - prev.y;
+      u_prev[IX(i, j)] += dx * 1.2;
+      v_prev[IX(i, j)] += dy * 1.2;
+      prev = { x, y };
+    });
+
+    // --- UI controls ---
+    document.getElementById('pause').onclick = () => { running = !running; };
+    document.getElementById('clear').onclick = () => {
+      u.fill(0); v.fill(0); dens.fill(0);
+      u_prev.fill(0); v_prev.fill(0); dens_prev.fill(0);
+    };
+    document.getElementById('visc').oninput = e => { visc = parseFloat(e.target.value); };
+    document.getElementById('diff').oninput = e => { diff = parseFloat(e.target.value); };
+
+    // --- Main loop ---
+    function step() {
+      if (running) {
+        vel_step(u, v, u_prev, v_prev, visc, dt);
+        dens_step(dens, dens_prev, u, v, diff, dt);
+        u_prev.fill(0); v_prev.fill(0); dens_prev.fill(0);
+      }
+      render();
+      updateDiagnostics();
+      requestAnimationFrame(step);
+    }
+
+    step();
+  </script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020"/>
+  <title>Memory Trainer — Mobile+ Word Bank</title>
+  <style>
+    :root{ --bg:#0b1020; --card:#111832; --muted:#2a355f; --text:#e8ecff; --accent:#7aa2ff; --accent-2:#16a34a; --warn:#b45309; --danger:#dc2626; --scale:1; --tap:48px; --radius:18px; }
+    [data-theme="light"]{ --bg:#f6f7fb; --card:#ffffff; --muted:#dfe5f5; --text:#1b2138; --accent:#3b6cff; --accent-2:#16a34a; --warn:#b45309; --danger:#dc2626; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+    html,body{ height:100%; }
+    body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--text); }
+    .container{ max-width:1100px; margin:0 auto; padding: clamp(14px, 3vw, 20px); padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+    header{ display:flex; align-items:center; gap:12px; justify-content:space-between; position:sticky; top:0; background:linear-gradient(180deg,var(--bg),color-mix(in oklab, var(--bg) 70%, transparent)); padding-bottom:6px; z-index:5; }
+    h1{ font-weight:800; letter-spacing:0.2px; font-size:clamp(calc(20px*var(--scale)), 5vw, 30px); margin:0; }
+    .tabs{ display:flex; overflow:auto hidden; gap:8px; padding:4px 0; -webkit-overflow-scrolling:touch; scroll-behavior:smooth; }
+    .tab{ min-height:var(--tap); padding:10px 14px; border-radius:14px; background:var(--card); color:var(--text); border:1px solid var(--muted); cursor:pointer; user-select:none; font-size:clamp(14px, 3.6vw, 16px); }
+    .tab.active{ outline:2px solid var(--accent); }
+    .grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:12px; }
+    .card{ grid-column: span 12; background:var(--card); border:1px solid var(--muted); border-radius:var(--radius); padding:14px; box-shadow:0 6px 18px rgba(0,0,0,.15); }
+    @media(min-width:900px){ .card.half{ grid-column: span 6; } }
+    label{ font-size:clamp(12px, 3.2vw, 13px); opacity:.95; display:block; margin:.2rem 0; }
+    input, select, textarea{ width:100%; min-height:var(--tap); padding:12px; border-radius:12px; border:1px solid var(--muted); background:transparent; color:var(--text); font-size:clamp(14px, 3.8vw, 16px); }
+    textarea{ min-height:90px; resize:vertical; }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    button{ min-height:var(--tap); padding:12px 16px; border-radius:12px; border:1px solid var(--muted); background:var(--accent); color:white; cursor:pointer; font-weight:700; font-size:clamp(14px,3.8vw,16px); }
+    button.ghost{ background:transparent; color:var(--text); }
+    button.ok{ background:var(--accent-2); }
+    button.warn{ background:var(--warn); color:white; }
+    button.danger{ background:var(--danger); color:white; }
+    .pill{ padding:6px 10px; border-radius:999px; border:1px solid var(--muted); display:inline-flex; gap:6px; align-items:center; }
+    .muted{ opacity:.85; font-size:clamp(12px,3.2vw,13px); }
+    .space{ height:8px; }
+    .bigcard{ font-size:clamp(calc(22px*var(--scale)), 6vw, 32px); text-align:center; border:2px dashed var(--muted); padding:20px; border-radius:16px; min-height:120px; }
+    .list{ display:grid; gap:8px; }
+    .list-item{ padding:12px; border:1px solid var(--muted); border-radius:12px; display:flex; gap:8px; align-items:flex-start; justify-content:space-between; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <header>
+      <div class="row" style="gap:10px; align-items:center;">
+        <h1>🧠 Memory Trainer</h1>
+        <span class="pill" id="streakBadge" aria-live="polite">Streak: 0 🔥</span>
+        <span class="pill" id="xpBadge" aria-live="polite">XP: 0</span>
+      </div>
+      <div class="row" role="toolbar" aria-label="App controls">
+        <button class="ghost" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">🌗</button>
+        <button class="ghost" id="bigUiBtn" title="Big UI" aria-pressed="false">🔎A+</button>
+        <button class="ghost" id="exportBtn" title="Export data to a file or share">⬇️ Export</button>
+        <label class="pill" aria-label="Import JSON data"><span>⬆️ Import</span><input type="file" id="importInput" accept="application/json" style="display:none"></label>
+        <button class="danger" id="eraseBtn" title="Erase all local data">🗑️ Erase</button>
+      </div>
+    </header><div class="space"></div>
+
+<nav class="tabs" id="tabs"></nav>
+
+<div class="space"></div>
+
+<main id="view" aria-live="polite"></main>
+
+  </div>  <script>
+  // ===== State & Storage =====
+  const VERSION = 3;
+  const DEFAULT_STATE = {
+    version: VERSION,
+    theme: 'dark',
+    bigUi: false,
+    createdAt: Date.now(),
+    streak: { days: 0, lastDay: null },
+    xp: 0,
+    sound: false,
+    decks: { default: { id:'default', name: 'My First Deck', createdAt: Date.now(), cards: [], boxes: {1:[],2:[],3:[],4:[],5:[]} } },
+    settings: { nBackN: 2, nBackSpeedMs: 1500, wordListSize: 12, numberLength: 9, wordBankSize: 500 },
+    palace: { loci: [] },
+    stats: { sessions: 0, correct: 0, total: 0 }
+  };
+  function load(){ try{ const raw = localStorage.getItem('memtrainer:plus'); if(!raw){ localStorage.setItem('memtrainer:plus', JSON.stringify(DEFAULT_STATE)); return structuredClone(DEFAULT_STATE); } const d=JSON.parse(raw); return {...DEFAULT_STATE, ...d}; }catch{ return structuredClone(DEFAULT_STATE); }}
+  function save(){ localStorage.setItem('memtrainer:plus', JSON.stringify(state)); renderBadges(); }
+  function reset(){ localStorage.removeItem('memtrainer:plus'); location.reload(); }
+  let state = load();
+
+  const $ = (s,el=document)=> el.querySelector(s);
+  const el = (tag, attrs={}, kids=[])=>{ const e=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>{ if(k==='class') e.className=v; else if(k==='html') e.innerHTML=v; else if(k.startsWith('on')) e.addEventListener(k.slice(2), v, {passive:true}); else e.setAttribute(k,v); }); kids.forEach(c=> e.appendChild(typeof c==='string'? document.createTextNode(c): c)); return e; };
+  const tryVibrate = (p)=>{ try{ navigator.vibrate && navigator.vibrate(p); }catch{} };
+  const fmtPct=(n)=> (n*100).toFixed(0)+'%';
+
+  // ===== Word bank (common everyday words) =====
+  const BASE_WORDS = `about above across action add after again age air all almost along also always among and animal another answer any apple area around ask at away baby back ball bank base be beach bear beat beauty because become bed been before begin behind believe bell best better between big bird black blue body book born both bottom box boy bring brother build busy but buy call came can cannot car carry case cat cause center century certain chair change check child choose city class clean clear close cold color come common company compare complete consider control cook cool correct cost could country course cover create cross cry current cut dad dance dark data day decide deep degree develop did die difference different difficult dinner direct discover do doctor dog door down draw dream drive dry during each earth east easy eat edge effect egg eight either element else end enough even evening event ever every example eye face fact fall family far farm fast father feel few field figure fill final find fine finger finish fire first fish five floor flower fly follow food foot for force forest form found four free friend from front full game garden gas get girl give glass go gold good got great green ground group grow guess half hand happen happy hard have he head hear heart heat help her here high him his history hit hold home hope horse hospital hot hour house how human hundred hungry I idea if imagine important in include increase inside interest into iron is island it job join just keep key kid kind king kitchen know land language large last late later laugh law lay lead learn least leave left leg length less let letter life light like line list little live long look lose lot love low machine made main make man many map mark market may me mean measure meat meet member men method middle milk mind minute miss money month moon more morning most mother mountain move much music must my name nation near necessary need never new next night no north note nothing notice noun now number object ocean of off offer office often oh old on once one only open or order other our out over own page paint pair paper parent part party pass past pattern pay people perhaps period person picture piece place plan plane plant play point poor possible power practice prepare present pretty price problem produce product program protect public pull push put question quick quiet quite radio rain raise range rather reach read ready real reason record red remember rest result rich ride right ring river road rock room round rule run said sail salt same sand save saw say school science sea second section see seed seem self sentence serve set several shape she ship shoe short should shoulder show side sign simple since sing sister sit six size sleep slow small snow so some someone something sometimes son song soon sound south space speak special spell spring square stand star start state stay step stick still stone stop store story straight strange street strong study subject such summer sun support sure table take talk teach team tell ten test than thank that the their them then there these they thin thing think third this those though thought thousand three through time to today together told tomorrow too took top total touch toward town train tree true try turn two under understand unit until up us use usual valley very voice vowel wait walk wall want war warm was watch water way we wear week weight well went were west what wheel when where which while white who whole why wide wife will win wind window winter wire wish with within without woman women word work world would write wrong year yes yet you young your`.split(/\s+/);
+  function buildWordPool(target){
+    const base = BASE_WORDS.slice();
+    if(base.length >= target) return base.slice(0, target);
+    const add = [];
+    const suffixes=['s','ed','ing'];
+    for(const w of base){
+      for(const sfx of suffixes){ add.push(w+sfx); if(base.length+add.length>=target) return base.concat(add).slice(0,target); }
+      add.push(w+Math.floor(Math.random()*10));
+      if(base.length+add.length>=target) return base.concat(add).slice(0,target);
+    }
+    return base.concat(add).slice(0,target);
+  }
+
+  // ===== Tabs / Router =====
+  const routes = [
+    { id:'flash', name:'Flashcards' },
+    { id:'nback', name:'N‑Back' },
+    { id:'words', name:'Word Recall' },
+    { id:'digits', name:'Number Chunking' },
+    { id:'palace', name:'Memory Palace' },
+    { id:'stats', name:'Settings' },
+  ];
+  let current = localStorage.getItem('memtrainer:route+') || 'words';
+  function renderTabs(){ const nav=$('#tabs'); nav.innerHTML=''; routes.forEach(r=> nav.appendChild(el('button',{class:'tab'+(current===r.id?' active':''), onclick:()=>{ current=r.id; localStorage.setItem('memtrainer:route+', current); draw(); }},[r.name]))); }
+
+  function renderBadges(){ $('#streakBadge').textContent = `Streak: ${state.streak.days} 🔥`; $('#xpBadge').textContent = `XP: ${state.xp}`; }
+  function todayKey(){ return new Date().toISOString().slice(0,10); }
+  function bumpStreak(){ const t=todayKey(); if(state.streak.lastDay===t) return; const y=new Date(); y.setDate(y.getDate()-1); const yk=y.toISOString().slice(0,10); state.streak.days = (state.streak.lastDay===yk)? state.streak.days+1:1; state.streak.lastDay=t; save(); }
+
+  // ===== Flashcards (same as earlier, trimmed) =====
+  function nextDueCard(deck){ const now=Date.now(); for(const b of [5,4,3,2,1]){ for(const id of deck.boxes[b]){ const c=deck.cards.find(x=>x.id===id); if(!c.nextAt||now>=c.nextAt) return {card:c, box:b}; } } return null; }
+  function schedule(deck, card, q){ const boxOf=id=> Number(Object.keys(deck.boxes).find(b=> deck.boxes[b].includes(id))||1); let b=boxOf(card.id); if(q===0) b=1; else if(q===1) b=Math.max(1,b); else if(q===2) b=Math.min(5,b+1); else b=Math.min(5,b+2); Object.values(deck.boxes).forEach(a=>{ const i=a.indexOf(card.id); if(i>-1) a.splice(i,1); }); deck.boxes[b].push(card.id); const mins={1:0,2:10,3:60,4:360,5:1440}[b]; card.nextAt=Date.now()+mins*60000; state.stats.sessions++; state.xp+=(q===3?5:q===2?3:q===1?1:0); bumpStreak(); save(); }
+  function FlashcardsView(){ const wrap=el('div',{class:'grid'}); const ids=Object.keys(state.decks); let did=localStorage.getItem('memtrainer:deck+')||ids[0]; if(!state.decks[did]) did=ids[0]; const deck=state.decks[did]; const deckCard=el('div',{class:'card half'}); const sel=el('select',{onchange:e=>{ localStorage.setItem('memtrainer:deck+',e.target.value); draw(); }}); ids.forEach(id=> sel.appendChild(el('option',{value:id, ...(id===did?{selected:''}:{})},[state.decks[id].name]))); deckCard.append(el('div',{class:'row'},[el('div',{style:'flex:1'},[el('label',{},['Decks']), sel]), el('button',{onclick:()=>{ const name=prompt('Name your new deck'); if(!name) return; const id=Math.random().toString(36).slice(2,9); state.decks[id]={id,name,createdAt:Date.now(),cards:[],boxes:{1:[],2:[],3:[],4:[],5:[]}}; save(); localStorage.setItem('memtrainer:deck+',id); draw(); }},['➕ New deck'])]), el('div',{class:'muted'},[`Cards: ${deck.cards.length}`]));
+    const addCard=el('div',{class:'card half'}); const fFront=el('textarea',{placeholder:'Front'}); const fBack=el('textarea',{placeholder:'Back'}); addCard.append(el('label',{},['Front']),fFront, el('label',{},['Back']),fBack, el('div',{class:'row',style:'margin-top:8px'},[ el('button',{onclick:()=>{ if(!fFront.value.trim()||!fBack.value.trim())return; const c={id:Math.random().toString(36).slice(2,9),front:fFront.value.trim(),back:fBack.value.trim(),nextAt:0}; deck.cards.push(c); deck.boxes[1].push(c.id); fFront.value=fBack.value=''; tryVibrate(10); save(); draw(); }},['Add card']), el('button',{class:'ghost',onclick:()=>{ fFront.value=fBack.value=''; }},['Clear']) ]));
+    const review=el('div',{class:'card',style:'grid-column: span 12'}); const due=nextDueCard(deck); if(!due){ review.append(el('div',{class:'bigcard'},['No cards due.'])); } else { let show=false; const q=el('div',{class:'bigcard'}); const upd=()=>{ q.innerHTML = show? `<div class="muted">Back</div>${escapeHtml(due.card.back)}`:`<div class="muted">Front</div>${escapeHtml(due.card.front)}`; }; upd(); review.append(q); const row=el('div',{class:'row'},[ el('button',{class:'ghost',onclick:()=>{ show=!show; upd(); }},['Flip']), el('button',{class:'danger',onclick:()=>schedule(deck,due.card,0)},['Again']), el('button',{class:'warn',onclick:()=>schedule(deck,due.card,1)},['Hard']), el('button',{class:'ok',onclick:()=>schedule(deck,due.card,2)},['Good']), el('button',{onclick:()=>schedule(deck,due.card,3)},['Easy']) ]); review.append(row);} wrap.append(deckCard, addCard, review); return wrap; }
+
+  // ===== N‑Back =====
+  function NBackView(){ const root=el('div',{class:'grid'}); const card=el('div',{class:'card'}); card.append(el('div',{class:'row'},[ el('div',{style:'flex:1'},[el('label',{},['N value']), el('input',{type:'number',min:1,max:6,value:state.settings.nBackN,onchange:e=>{state.settings.nBackN=+e.target.value; save();}})]), el('div',{style:'flex:1'},[el('label',{},['Speed (ms)']), el('input',{type:'number',min:600,step:100,value:state.settings.nBackSpeedMs,onchange:e=>{state.settings.nBackSpeedMs=+e.target.value; save();}})]), el('button',{onclick:start},['▶ Start']) ])); const screen=el('div',{class:'bigcard'},['Press Start. Tap MATCH when current equals N back.']); card.append(screen); const stats=el('div',{class:'row'},[ el('div',{class:'pill'},['Correct: ',el('b',{id:'nbC'},['0'])]), el('div',{class:'pill'},['Misses: ',el('b',{id:'nbM'},['0'])]), el('div',{class:'pill'},['False: ',el('b',{id:'nbF'},['0'])]) ]); card.append(stats); const match=el('button',{class:'ok',onclick:()=>{ if(locked) return; pressed=true; locked=true; if(idx>=state.settings.nBackN && seq[idx]===seq[idx-state.settings.nBackN]){ correct++; $('#nbC').textContent=String(correct);} else { falsy++; $('#nbF').textContent=String(falsy);} idx++; }},['MATCH']); card.append(match); root.append(card);
+    let seq=[], idx=0, timer=null, locked=true, correct=0, miss=0, falsy=0, pressed=false; const letters='ABCDEFGHJKLMNPQRSTUVWXYZ'.split('');
+    function step(){ if(idx>=seq.length){ clearInterval(timer); locked=true; state.xp += Math.max(0, correct*2 - falsy); bumpStreak(); save(); screen.textContent = `Done!`; return; } const cur=seq[idx]; screen.textContent=cur; pressed=false; locked=false; setTimeout(()=>{ if(!pressed){ if(idx>=state.settings.nBackN && cur===seq[idx-state.settings.nBackN]){ miss++; $('#nbM').textContent=String(miss);} idx++; } }, state.settings.nBackSpeedMs*0.7); }
+    function start(){ correct=miss=falsy=0; $('#nbC').textContent='0'; $('#nbM').textContent='0'; $('#nbF').textContent='0'; seq = Array.from({length: 24}, ()=> letters[Math.floor(Math.random()*letters.length)]); idx=0; screen.textContent='…'; setTimeout(()=>{ timer=setInterval(step, state.settings.nBackSpeedMs); }, 400); }
+    return root; }
+
+  // ===== Word Recall (with big word bank control) =====
+  function WordView(){ const root=el('div',{class:'grid'}); const card=el('div',{class:'card'});
+    const sizeInput=el('input',{type:'number',min:5,max:50,value:state.settings.wordListSize,onchange:e=>{state.settings.wordListSize=+e.target.value; save();}});
+    const bankSelect=el('select',{onchange:e=>{ state.settings.wordBankSize=+e.target.value; save(); }});
+    [100,300,500,1000].forEach(n=> bankSelect.appendChild(el('option',{value:n, ...(state.settings.wordBankSize===n?{selected:''}:{})},[String(n)+' word bank'])));
+    let list=[]; const listBox=el('div',{class:'bigcard'}); const entry=el('textarea',{placeholder:'Type words you remember… (spaces or new lines)', autocapitalize:'off'}); const result=el('div');
+    function generate(){ const pool = buildWordPool(state.settings.wordBankSize).slice(); list = Array.from({length: state.settings.wordListSize}, ()=> pool.splice(Math.floor(Math.random()*pool.length),1)[0]); listBox.textContent=list.join(' · '); result.innerHTML=''; entry.value=''; tryVibrate(10); }
+    function hide(){ listBox.textContent='Recall time!'; tryVibrate([5,40,5]); }
+    function check(){ const typed=entry.value.toLowerCase().split(/\W+/).filter(Boolean); const set=new Set(typed); const correct=list.filter(w=> set.has(w.toLowerCase())); const pct=Math.round(correct.length/list.length*100); result.innerHTML=`<b>${correct.length}/${list.length}</b> (${pct}%).<br><span class="muted">Missed:</span> ${list.filter(w=>!set.has(w.toLowerCase())).join(', ')}`; state.stats.correct+=correct.length; state.stats.total+=list.length; state.xp+=correct.length; bumpStreak(); save(); }
+    const help=el('div',{class:'muted'},['How to: Generate → study for 20–30s → Hide → recall → Check. Increase List size or Word bank to make it harder.']);
+    card.append(el('div',{class:'row'},[ el('div',{style:'flex:1'},[el('label',{},['List size']), sizeInput]), el('div',{style:'flex:1'},[el('label',{},['Word bank']), bankSelect]), el('button',{onclick:generate},['🎲 Generate']), el('button',{onclick:hide},['🙈 Hide']), el('button',{onclick:check},['✅ Check']) ]), help, listBox, el('div',{class:'space'}), entry, el('div',{class:'space'}), result ); root.append(card); return root; }
+
+  // ===== Digits =====
+  function DigitsView(){ const root=el('div',{class:'grid'}); const card=el('div',{class:'card'}); const lenInput=el('input',{type:'number',min:4,value:state.settings.numberLength,onchange:e=>{state.settings.numberLength=+e.target.value; save();}}); const seqBox=el('div',{class:'bigcard'}); const entry=el('input',{placeholder:'Enter the number…',inputmode:'numeric'}); const res=el('div'); let seq=''; function gen(){ seq=Array.from({length: state.settings.numberLength}, ()=> Math.floor(Math.random()*10)).join(''); seqBox.textContent=seq; res.textContent=''; tryVibrate(10);} function hide(){ seqBox.textContent='Recall!'; } function check(){ const ok=entry.value.trim(); const pct=Math.round((ok.length? ok.split('').filter((c,i)=>c===seq[i]).length:0)/seq.length*100); res.textContent=`${pct}% correct`; state.xp+=Math.floor(pct/10); bumpStreak(); save(); }
+    card.append(el('div',{class:'row'},[ el('div',{style:'flex:1'},[el('label',{},['Digits length']), lenInput]), el('button',{onclick:gen},['🎲 Generate']), el('button',{onclick:hide},['🙈 Hide']), el('button',{onclick:check},['✅ Check']) ]), seqBox, el('div',{class:'space'}), entry, el('div',{class:'space'}), res ); root.append(card); return root; }
+
+  // ===== Memory Palace =====
+  function PalaceView(){ const root=el('div',{class:'grid'}); const card=el('div',{class:'card'}); const name=el('input',{placeholder:'Location / Locus name'}); const hook=el('input',{placeholder:'Vivid hook / imagery'}); const img=el('input',{placeholder:'Optional image URL'}); const add=el('button',{onclick:()=>{ if(!name.value.trim()) return; state.palace.loci.push({ id: Math.random().toString(36).slice(2,9), name:name.value.trim(), hook:hook.value.trim(), img:img.value.trim(), createdAt:Date.now()}); name.value=hook.value=img.value=''; tryVibrate(10); save(); draw(); }},['➕ Add Locus']); card.append(el('div',{class:'row'},[ el('div',{style:'flex:1'},[el('label',{},['Name']), name]), el('div',{style:'flex:1'},[el('label',{},['Hook']), hook]), el('div',{style:'flex:1'},[el('label',{},['Image URL']), img]), add ])); const list=el('div',{class:'list'}); state.palace.loci.forEach(l=>{ const row=el('div',{class:'list-item'}); const left=el('div'); left.append(el('div',{style:'font-weight:700'},[l.name]), el('div',{class:'muted'},[l.hook||'—'])); row.append(left); if(l.img){ row.append(el('img',{src:l.img,alt:l.name,style:'width:86px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--muted)'})); } row.append(el('button',{class:'ghost',onclick:()=>{ if(confirm('Delete this locus?')){ state.palace.loci = state.palace.loci.filter(x=>x.id!==l.id); tryVibrate([5,40,5]); save(); draw(); } }},['🗑️ Delete'])); list.append(row); }); card.append(list); root.append(card); return root; }
+
+  // ===== Settings =====
+  function StatsView(){ const root=el('div',{class:'grid'}); const a=el('div',{class:'card half'}); const acc= state.stats.total? state.stats.correct/state.stats.total:0; a.append(el('h3',{},['Overall'])); a.append(el('div',{class:'row'},[ el('div',{class:'pill'},[`Sessions: ${state.stats.sessions}`]), el('div',{class:'pill'},[`Accuracy: ${fmtPct(acc)}`]), el('div',{class:'pill'},[`XP: ${state.xp}`]) ])); const p=el('div',{class:'progress'}); const bar=el('span'); bar.style= 'display:block;height:10px;background:var(--accent);width:'+(acc*100)+'%;border-radius:999px;'; p.append(bar); a.append(p); const b=el('div',{class:'card half'}); b.append(el('h3',{},['Preferences'])); const themeSel=el('select',{onchange:e=>{ state.theme=e.target.value; applyTheme(); save(); }}); themeSel.append(el('option',{value:'dark', ...(state.theme==='dark'?{selected:''}:{})},['Dark']), el('option',{value:'light', ...(state.theme==='light'?{selected:''}:{})},['Light'])); b.append(el('label',{},['Theme']), themeSel); root.append(a,b); return root; }
+
+  // ===== Render =====
+  const views = { flash:FlashcardsView, nback:NBackView, words:WordView, digits:DigitsView, palace:PalaceView, stats:StatsView };
+  function draw(){ renderTabs(); renderBadges(); const v=$('#view'); v.innerHTML=''; v.append(views[current]()); }
+  function applyTheme(){ document.documentElement.setAttribute('data-theme', state.theme==='light' ? 'light' : 'dark'); }
+  function applyBigUi(){ document.documentElement.style.setProperty('--scale', state.bigUi? '1.15' : '1'); }
+  applyTheme(); applyBigUi();
+
+  // Header buttons
+  $('#themeBtn').addEventListener('click', ()=>{ state.theme = state.theme==='dark'?'light':'dark'; applyTheme(); save(); tryVibrate(8); });
+  $('#bigUiBtn').addEventListener('click', (e)=>{ state.bigUi = !state.bigUi; applyBigUi(); e.target.setAttribute('aria-pressed', String(state.bigUi)); tryVibrate(8); save(); });
+  $('#exportBtn').addEventListener('click', ()=>{ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='memory-trainer-plus.json'; a.click(); });
+  $('#importInput').addEventListener('change', (e)=>{ const file=e.target.files[0]; if(!file) return; const r=new FileReader(); r.onload=()=>{ try{ const data=JSON.parse(r.result); if(data){ state={...DEFAULT_STATE, ...data, version:VERSION}; save(); draw(); } }catch{ alert('Invalid JSON'); } }; r.readAsText(file); });
+  $('#eraseBtn').addEventListener('click', ()=>{ if(confirm('Erase ALL data?')) reset(); });
+
+  // Init
+  draw();
+  </script></body>
+</html>'

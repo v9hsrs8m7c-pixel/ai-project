@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Four-Player Chess — FFA</title>
+<style>
+  :root{ --board-size: 700px; --piece-scale: .86; }
+  html,body{margin:0;padding:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f7faf9;color:#111}
+  #app{display:grid;gap:12px;padding:12px;max-width:1600px;margin:0 auto}
+  #hud{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #turnInfo{padding:8px 12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  #statusBar{flex:1;min-height:24px;padding:8px 12px;background:#fff;border-left:6px solid #049eff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  #statusBar.warn{border-color:#ff9800} #statusBar.error{border-color:#e53935}
+  #timerControls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .clock{padding:8px 10px;background:#fff;border-radius:10px;box-shadow:0 4px 3px rgba(10,10,10,.2);min-width:120px;display:flex;justify-content:space-between;align-items:center;font-variant-numeric:tabular-nums}
+  .clock strong{font-size:36px}
+  #table{display:grid;place-items:center}
+  section.board{width:var(--board-size);height:var(--board-size);display:grid;grid-template-columns:repeat(14,1fr);grid-template-rows:repeat(14,1fr);background:#fff;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.07);position:relative;overflow:hidden}
+  .square{display:flex;align-items:center;justify-content:center;user-select:none;touch-action:manipulation;font-size:calc((var(--board-size)/14*var(--piece-scale)))}
+  .light{background:#EEEED2}.dark{background:#769656}.void{background:#111;filter:brightness(.2);pointer-events:none}
+  .square.hint{box-shadow:inset 0 0 0 6px rgba(20,20,20,.22)}
+  .square.selected{outline:3px solid rgba(4,158,255,.72);outline-offset:-3px}
+  .square.lastmove{outline:6px solid rgba(255,215,0,.57);outline-offset:-6px}
+  .piece{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-weight:600;-webkit-text-stroke:1px rgba(0,0,0,.25)}
+  .K::after{content:"♔"}.Q::after{content:"♕"}.B::after{content:"♗"}.N::after{content:"♘"}.R::after{content:"♖"}.P::after{content:"♙"}
+  .sideR{color:#e74c3c}.sideB{color:#3498db}.sideY{color:#f1c40f}.sideG{color:#2ecc71}
+  .dead{color:#9e9e9e !important; -webkit-text-stroke:1px rgba(0,0,0,.2)}
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center}
+  .overlay.show{display:flex}
+  .modal{background:#fff;padding:16px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.25);min-width:240px}
+  .promo-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .promo-btn{height:64px;border-radius:10px;border:1px solid #ddd;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:28px}
+  #sizeControls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:8px 12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div id="turnInfo">Turn: <b id="turnSide">Red</b></div>
+    <div id="statusBar" aria-live="polite">FFA. Red to move. Tap a piece to see legal moves.</div>
+  </div>
+
+  <div id="timerControls">
+    <label>Minutes/player: <input id="minutesInput" type="number" min="1" max="180" step="1" style="width:80px" value="10"></label>
+    <label>Increment (sec): <input id="incrementInput" type="number" min="0" max="60" step="1" style="width:80px" value="0"></label>
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="resetBtn">Reset</button>
+    <div class="clock"><span>Red ⏱</span>   <strong id="rClock">10:00</strong></div>
+    <div class="clock"><span>Blue ⏱</span>  <strong id="bClock">10:00</strong></div>
+    <div class="clock"><span>Yellow ⏱</span><strong id="yClock">10:00</strong></div>
+    <div class="clock"><span>Green ⏱</span> <strong id="gClock">10:00</strong></div>
+  </div>
+
+  <div id="table">
+    <section id="board" class="board"></section>
+  </div>
+
+  <div id="sizeControls">
+    <strong>Board & Pieces</strong>
+    <label style="display:flex;gap:8px;align-items:center;">
+      Board: <input id="boardSizeSlider" type="range" min="420" max="1100" step="10" value="700">
+      <input id="boardSizeNumber" type="number" min="420" max="1100" step="10" value="700" style="width:90px">
+      <span>px</span>
+    </label>
+    <label style="display:flex;gap:1px;align-items:center;">
+      <input id="pieceScaleSlider" type="range" value="0.65" disabled>
+      <input id="pieceScaleNumber" type="number" value="0.65" style="width:9px" disabled>
+  
+    </label>
+    
+    
+  </div>
+</div>
+
+<script>
+/* ---------- constants & helpers ---------- */
+const SIDES = ['R','Y','B','G']; 
+const NAMES = {R:'Red',B:'Blue',Y:'Yellow',G:'Green'};
+const COLORS = {R:'sideR',B:'sideB',Y:'sideY',G:'sideG'};
+const TYPES  = {K:'K',Q:'Q',R:'R',B:'B',N:'N',P:'P'};
+const DEAD   = {}; SIDES.forEach(s=>DEAD[s]=false);
+
+const boardEl = document.getElementById('board');
+const turnLbl = document.getElementById('turnSide');
+const statusBar = document.getElementById('statusBar');
+
+function setStatus(msg, kind){ statusBar.classList.remove('warn','error'); if(kind) statusBar.classList.add(kind); statusBar.textContent = msg; }
+function fmt(ms){ ms=Math.max(0,ms|0); const s=(ms/1000)|0, m=(s/60)|0, r=s%60; return String(m).padStart(2,'0')+':'+String(r).padStart(2,'0'); }
+
+/* ---------- board shape ---------- */
+function isVoid(x,y){ return (x<3&&y<3)||(x>10&&y<3)||(x<3&&y>10)||(x>10&&y>10); }
+function inBounds(x,y){ return x>=0&&y>=0&&x<14&&y<14&&!isVoid(x,y); }
+function sqColor(x,y){ return ((x+y)&1)?'dark':'light'; }
+
+/* ---------- state ---------- */
+let board=[]; // 14x14 squares -> {t:'PQRBNK', s:'R/B/Y/G', moved?, dead?}
+let turn='R', selected=null, lastMove=null, ep=null, winner=null;
+
+/* ---------- build board DOM ---------- */
+function buildDOM(){
+  boardEl.innerHTML='';
+  for(let y=0;y<14;y++){
+    for(let x=0;x<14;x++){
+      const d=document.createElement('div');
+      d.className='square '+(isVoid(x,y)?'void':sqColor(x,y));
+      d.dataset.x=x; d.dataset.y=y;
+      if(!isVoid(x,y)){
+        d.addEventListener('pointerdown', onDown, {passive:true});
+        d.addEventListener('pointerup',   onUp,   {passive:true});
+      }
+      boardEl.appendChild(d);
+    }
+  }
+}
+function emptyBoard(){ board = Array.from({length:14},()=>Array(14).fill(null)); }
+
+/* ---------- initial position ---------- */
+function placeInitial(){
+  emptyBoard();
+  const backA=['R','N','B','Q','K','B','N','R'];
+  const backB=['R','N','B','K','Q','B','N','R'];
+
+
+  // Blue (top)
+  for(let i=0;i<8;i++){ board[3+i][0]={t:backB[i],s:'B'}; board[3+i][1]={t:'P',s:'B'}; }
+
+  // Red (bottom)
+  for(let i=0;i<8;i++){ board[3+i][13]={t:backA[i],s:'R'}; board[3+i][12]={t:'P',s:'R'}; }
+
+  // Yellow (left)
+  for(let i=0;i<8;i++){ board[0][3+i]={t:backB[i],s:'Y'}; board[1][3+i]={t:'P',s:'Y'}; }
+
+  // Green (right)
+  for(let i=0;i<8;i++){ board[13][3+i]={t:backA[i],s:'G'}; board[12][3+i]={t:'P',s:'G'}; }
+
+  SIDES.forEach(s=>DEAD[s]=false);
+  turn='R'; selected=null; lastMove=null; ep=null; winner=null;
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  const nodes=boardEl.children; // 14*14
+  for(let i=0;i<nodes.length;i++){ const n=nodes[i]; n.classList.remove('hint','selected','lastmove'); const p=n.querySelector('.piece'); if(p) n.removeChild(p); }
+  for(let y=0;y<14;y++) for(let x=0;x<14;x++){
+    const P=board[x][y]; if(!P) continue;
+    const idx=y*14+x, sq=nodes[idx], e=document.createElement('div');
+    e.className=`piece ${COLORS[P.s]} ${TYPES[P.t]} ${P.dead?'dead':''}`; sq.appendChild(e);
+  }
+  if(lastMove){
+    const i1=lastMove.fy*14+lastMove.fx, i2=lastMove.ty*14+lastMove.tx;
+    [nodes[i1],nodes[i2]].forEach(n=>n.classList.add('lastmove'));
+  }
+  turnLbl.textContent=NAMES[turn];
+}
+
+/* ---------- movement helpers ---------- */
+function forwardVec(s){
+  // Red(bottom) up, Blue(top) down, Yellow(left) right, Green(right) left
+  return s==='R' ? [0,-1] :
+         s==='B' ? [0, 1] :
+         s==='Y' ? [1, 0] : [-1,0]; // G
+}
+function diagVecs(s){
+  if(s==='R') return [[-1,-1],[1,-1]];
+  if(s==='B') return [[-1, 1],[1, 1]];
+  if(s==='Y') return [[1,-1],[1, 1]];
+  return [[-1,-1],[-1,1]]; // G
+}
+function cloneBoard(){ return board.map(col=>col.map(c=>c?{...c}:null)); }
+function sideAlive(s){ return !DEAD[s]; }
+function nextSideAlive(s){
+  let i=SIDES.indexOf(s);
+  for(let k=1;k<=4;k++){ const cand=SIDES[(i+k)%4]; if(sideAlive(cand)) return cand; }
+  return s;
+}
+
+/* ---------- attack & check ---------- */
+function kingPos(s,S=board){ for(let y=0;y<14;y++) for(let x=0;x<14;x++){ const p=S[x][y]; if(p && p.s===s && p.t==='K') return {x,y}; } return null; }
+function enemiesOf(s){ return SIDES.filter(x=>x!==s && sideAlive(x)); }
+function pseudoMoves(x,y,S=board,captureOnly=false,forAttack=false){
+  const p=S[x][y]; if(!p || p.dead) return [];
+  const out=[]; const s=p.s;
+
+  if(p.t==='P'){
+    const [fx,fy]=forwardVec(s);
+    const nx=x+fx, ny=y+fy;
+    if(!captureOnly && inBounds(nx,ny) && !S[nx][ny]) out.push({x:nx,y:ny, epSet:true});
+    // double
+    const start = 
+     (s==='R' && y===12) ||
+     (s==='B' && y===1)  ||
+     (s==='Y' && x===1)  ||
+     (s==='G' && x===12);
+     const nx2=x+2*fx, ny2=y+2*fy;
+    if(!captureOnly && start && inBounds(nx2,ny2) && !S[nx][ny] && !S[nx2][ny2]) out.push({x:nx2,y:ny2, epSet:true, dbl:true});
+    // captures
+    for(const [dx,dy] of diagVecs(s)){
+      const cx=x+dx, cy=y+dy;
+      if(inBounds(cx,cy)){
+        const t=S[cx][cy];
+        if(t && !t.dead && t.s!==s) out.push({x:cx,y:cy});
+        // EP
+        if(ep && ep.x===cx && ep.y===cy && !captureOnly) out.push({x:cx,y:cy,ep:true});
+      }
+    }
+  }else if(p.t==='N'){
+    const d=[[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];
+    for(const [dx,dy] of d){ const nx=x+dx, ny=y+dy; if(!inBounds(nx,ny)) continue; const t=S[nx][ny]; if(!t || t.s!==s || (forAttack&&t.dead)) out.push({x:nx,y:ny}); }
+  }else if(p.t==='B' || p.t==='R' || p.t==='Q'){
+    const dirs=[];
+    if(p.t!=='B') dirs.push([1,0],[-1,0],[0,1],[0,-1]);
+    if(p.t!=='R') dirs.push([1,1],[-1,1],[1,-1],[-1,-1]);
+    for(const [dx,dy] of dirs){
+      let nx=x+dx, ny=y+dy;
+      while(inBounds(nx,ny)){
+        const t=S[nx][ny];
+        if(!t){ out.push({x:nx,y:ny}); }
+        else{ if(t.s!==s && !t.dead) out.push({x:nx,y:ny}); break; }
+        nx+=dx; ny+=dy;
+      }
+    }
+  }else if(p.t==='K'){
+    for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+      if(dx===0&&dy===0) continue; const nx=x+dx, ny=y+dy; if(!inBounds(nx,ny)) continue;
+      const t=S[nx][ny]; if(!t || (t.s!==s && !t.dead)) out.push({x:nx,y:ny});
+    }
+    // castling (FFA allowed): along home rank/file depending on side
+    if(!p.moved && !captureOnly && !forAttack){
+      const horiz = (s==='R'||s==='B'); // bottom/top castle along x, left/right along y
+      if(horiz){
+        // king-side: toward bigger x for Y/G
+        tryAddCastle(out, x,y, +1,  'K');
+        // queen-side: toward smaller x
+        tryAddCastle(out, x,y, -1, 'Q');
+      }else{
+        // R/B castle along y (R upward smaller y, downward bigger y? R back is x=13, so rank is column; we treat +1 toward larger y (down), -1 toward smaller y (up))
+        tryAddCastle(out, x,y, +1, 'K'); // “down”
+        tryAddCastle(out, x,y, -1,'Q');  // “up”
+      }
+    }
+  }
+  return out;
+}
+function tryAddCastle(out, kx,ky, dir, tag){
+  // walk from king to edge; first rook unmoved with clear path; king not in check and not passing through attacked squares
+  const s = board[kx][ky].s;
+  const horiz = (s==='Y'||s==='G');
+  const step = (horiz? [dir,0]:[0,dir]);
+  let x=kx+step[0], y=ky+step[1];
+  const trail=[];
+  while(inBounds(x,y)){
+    const t=board[x][y];
+    if(t){
+      if(t.s===s && t.t==='R' && !t.moved){ // found rook
+        // squares king travels: two squares toward rook
+        const tx1=kx+step[0], ty1=ky+step[1];
+        const tx2=kx+2*step[0], ty2=ky+2*step[1];
+        if(trail.every(sq=>!board[sq.x][sq.y]) && !board[tx1][ty1] && !board[tx2][ty2]){
+          if(!attacked(kx,ky,s) && !attacked(tx1,ty1,s) && !attacked(tx2,ty2,s)){
+            out.push({x:tx2,y:ty2, castle:{rx:x,ry:y, kx2:tx2,ky2:ty2, rtx:tx1,rty:ty1}});
+          }
+        }
+      }
+      break;
+    }else{
+      trail.push({x,y});
+    }
+    x+=step[0]; y+=step[1];
+  }
+}
+function attacked(x,y, victimSide){ // is (x,y) attacked by any alive enemy?
+  for(const foe of enemiesOf(victimSide)){
+    for(let yy=0;yy<14;yy++) for(let xx=0;xx<14;xx++){
+      const p=board[xx][yy]; if(!p || p.s!==foe || p.dead) continue;
+      const caps=pseudoMoves(xx,yy,board,true,true);
+      if(caps.some(m=>m.x===x && m.y===y)) return true;
+    }
+  }
+  return false;
+}
+function inCheck(s,S=board){ const k=kingPos(s,S); return k ? enemiesOf(s).some(foe=> squareAttackedBy(foe,k.x,k.y,S)) : false; }
+function squareAttackedBy(side,x,y,S){
+  for(let yy=0;yy<14;yy++) for(let xx=0;xx<14;xx++){
+    const p=S[xx][yy]; if(!p || p.s!==side || p.dead) continue;
+    const caps=pseudoMoves(xx,yy,S,true,true);
+    if(caps.some(m=>m.x===x && m.y===y)) return true;
+  }
+  return false;
+}
+
+function legalMoves(x,y){
+  const p=board[x][y]; if(!p || p.dead) return [];
+  const pseudo=pseudoMoves(x,y,board);
+  const out=[];
+  for(const m of pseudo){
+    const C=cloneBoard(); const piece=C[x][y]; C[x][y]=null;
+    if(m.ep){
+      const [fx,fy]=forwardVec(piece.s);
+      C[m.x - fx][m.y - fy]=null; C[m.x][m.y]=piece;
+    }else if(m.castle){
+      // move king and rook
+      const r = C[m.castle.rx][m.castle.ry];
+      C[m.castle.rx][m.castle.ry]=null;
+      C[m.castle.rtx][m.castle.rty]=r; if(r) r.moved=true;
+      C[m.x][m.y]=piece;
+    }else{
+      C[m.x][m.y]=piece;
+    }
+    if(!inCheck(piece.s,C)) out.push(m);
+  }
+  return out;
+}
+
+/* ---------- promotion rule (8th rank of its own color) ---------- */
+function isPromotionSquare(s,x,y){
+  if(s==='B') return y===7; // top to center
+  if(s==='R') return y===6; // bottom to center
+  if(s==='Y') return x===7; // left to center
+  return x===6;             // right to center (Green)
+}
+
+/* ---------- UI interactions ---------- */
+let hintIdx=[];
+function onDown(e){
+  if(winner) return;
+  const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y;
+  const p=board[x][y];
+  if(!p || p.s!==turn || p.dead){ if(selected) toggleSel(selected,false); return; }
+  selected={x,y}; toggleSel(selected,true); showHints(legalMoves(x,y));
+}
+function onUp(e){
+  if(!selected || winner) return;
+  const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y;
+  if(selected.x===x && selected.y===y) return;
+  const L=legalMoves(selected.x,selected.y);
+  const mv=L.find(m=>m.x===x && m.y===y);
+  if(!mv) return;
+  doMove(selected,mv);
+}
+function toggleSel(sel,on){ const idx=sel.y*14+sel.x; boardEl.children[idx].classList.toggle('selected',on); }
+function showHints(moves){ clearHints(); for(const m of moves){ const i=m.y*14+m.x; hintIdx.push(i); boardEl.children[i].classList.add('hint'); } }
+function clearHints(){ hintIdx.forEach(i=>boardEl.children[i].classList.remove('hint')); hintIdx.length=0; }
+
+/* ---------- execute move ---------- */
+function doMove(from,m){
+  const p=board[from.x][from.y]; ep=null;
+
+  if(m.ep){ const [fx,fy]=forwardVec(p.s); board[m.x - fx][m.y - fy]=null; }
+  if(m.castle){
+    const r=board[m.castle.rx][m.castle.ry];
+    board[m.castle.rx][m.castle.ry]=null;
+    board[m.castle.rtx][m.castle.rty]=r; if(r) r.moved=true;
+  }
+  board[m.x][m.y]=p; board[from.x][from.y]=null; p.moved=true;
+
+  // set EP target if pawn double-stepped
+  if(p.t==='P'){
+    const [fx,fy]=forwardVec(p.s);
+    const two = (Math.abs((m.x-from.x)+(m.y-from.y))===2);
+    if(two) ep={x:from.x+fx,y:from.y+fy};
+    // promotion?
+    if(isPromotionSquare(p.s,m.x,m.y)){ return showPromotion(p.s,m.x,m.y); }
+  }
+
+  lastMove={fx:from.x,fy:from.y,tx:m.x,ty:m.y}; selected=null; clearHints(); render();
+
+  // eliminate players on their own turn if no moves (stalemate) or checkmate
+  finalizeEliminations();
+
+  if(checkForWinner()) return;
+  applyIncrement(turn);
+  turn = nextSideAlive(turn);
+  startClockIfNeeded();
+  setStatus(NAMES[turn]+' to move.');
+  render();
+}
+
+/* ---------- elimination, mate/stalemate ---------- */
+function hasAnyLegalMove(s){
+  for(let y=0;y<14;y++) for(let x=0;x<14;x++){
+    const p=board[x][y]; if(!p || p.s!==s || p.dead) continue;
+    if(legalMoves(x,y).length) return true;
+  }
+  return false;
+}
+function eliminate(s){
+  DEAD[s]=true;
+  for(let y=0;y<14;y++) for(let x=0;x<14;x++){
+    const p=board[x][y]; if(p && p.s===s){ p.dead=true; }
+  }
+}
+function finalizeEliminations(){
+  // if the just-moved side gave mate to someone whose turn it is now? In FFA we eliminate only when it's that player's turn and they are checkmated OR stalemated.
+  const s = turn; // the side that is about to move (was next before we rotate)
+  if(!sideAlive(s)) return;
+  const cm = inCheck(s) && !hasAnyLegalMove(s);
+  const st = !inCheck(s) && !hasAnyLegalMove(s);
+  if(cm){ eliminate(s); setStatus(NAMES[s]+' is checkmated and eliminated (pieces turn gray).','warn'); }
+  else if(st){ eliminate(s); setStatus(NAMES[s]+' is stalemated and eliminated (pieces turn gray).','warn'); }
+}
+function checkForWinner(){
+  const alive = SIDES.filter(sideAlive);
+  if(alive.length===1){ winner=alive[0]; stopClock(); setStatus(NAMES[winner]+' wins!','warn'); return true; }
+  return false;
+}
+
+/* ---------- promotion UI ---------- */
+function showPromotion(side,x,y){
+  let overlay=boardEl.querySelector('.overlay');
+  if(!overlay){
+    overlay=document.createElement('div'); overlay.className='overlay';
+    overlay.innerHTML=`<div class="modal"><h3>Promote to:</h3>
+      <div class="promo-row">
+        <button class="promo-btn" data-t="Q">♕</button>
+        <button class="promo-btn" data-t="R">♖</button>
+        <button class="promo-btn" data-t="B">♗</button>
+        <button class="promo-btn" data-t="N">♘</button>
+      </div></div>`;
+    boardEl.appendChild(overlay);
+  }
+  overlay.classList.add('show');
+  overlay.querySelectorAll('.promo-btn').forEach(btn=>{
+    const choose=()=>{
+      const t=btn.dataset.t; board[x][y]={t,s:side,moved:true};
+      overlay.classList.remove('show'); render();
+      finalizeEliminations(); if(checkForWinner()) return;
+      applyIncrement(turn); turn=nextSideAlive(turn); startClockIfNeeded(); setStatus(NAMES[turn]+' to move.');
+    };
+    btn.onclick=choose; btn.onpointerdown=(e)=>{e.preventDefault();choose();};
+  });
+}
+
+/* ---------- clocks: one per player ---------- */
+let mins=10, inc=0, ms={R:600000,B:600000,Y:600000,G:600000}, timer=null, lastTick=null, started=false;
+const rClock=document.getElementById('rClock'), bClock=document.getElementById('bClock'),
+      yClock=document.getElementById('yClock'), gClock=document.getElementById('gClock');
+function updClocks(){ rClock.textContent=fmt(ms.R); bClock.textContent=fmt(ms.B); yClock.textContent=fmt(ms.Y); gClock.textContent=fmt(ms.G); }
+function tick(){
+  const now=performance.now(), dt=now-lastTick; lastTick=now;
+  if(!sideAlive(turn)) return;
+  ms[turn]-=dt; if(ms[turn]<=0){ ms[turn]=0; eliminate(turn); setStatus(NAMES[turn]+' flagged and is eliminated.','error'); if(checkForWinner()) return; turn=nextSideAlive(turn); }
+  updClocks();
+}
+function startClockIfNeeded(){ if(!started || timer) return; lastTick=performance.now(); timer=setInterval(tick,200); }
+function stopClock(){ if(timer){ clearInterval(timer); timer=null; } }
+function applyIncrement(side){ if(inc>0) { ms[side]+=inc*1000; updClocks(); } }
+
+document.getElementById('startBtn').onclick=()=>{ if(!started){ mins=Math.max(1,+document.getElementById('minutesInput').value||10); inc=Math.max(0,+document.getElementById('incrementInput').value||0); ms={R:mins*60000,B:mins*60000,Y:mins*60000,G:mins*60000}; started=true; updClocks(); } startClockIfNeeded(); setStatus('Clock running.'); };
+document.getElementById('pauseBtn').onclick=()=>{ stopClock(); setStatus('Clock paused.'); };
+document.getElementById('resetBtn').onclick=()=>{ stopClock(); started=false; ms={R:mins*60000,B:mins*60000,Y:mins*60000,G:mins*60000}; placeInitial(); render(); updClocks(); setStatus('New FFA game. Red to move.'); };
+
+/* ---------- size controls ---------- */
+(function(){
+  const root=document.documentElement;
+  const bs=document.getElementById('boardSizeSlider'), bn=document.getElementById('boardSizeNumber');
+  const ps=document.getElementById('pieceScaleSlider'), pn=document.getElementById('pieceScaleNumber');
+  const setBoard=(v)=>root.style.setProperty('--board-size',v+'px');
+  const setScale=(v)=>root.style.setProperty('--piece-scale',String(v));
+  const sync=(a,b,cb)=>a.addEventListener('input',()=>{b.value=a.value; cb(parseFloat(a.value));});
+  sync(bs,bn,setBoard); sync(bn,bs,setBoard); sync(ps,pn,setScale); sync(pn,ps,setScale);
+  setBoard(parseFloat(bs.value)); setScale(parseFloat(ps.value));
+})();
+
+/* ---------- init ---------- */
+buildDOM(); placeInitial(); render(); updClocks(); setStatus('FFA. Red to move. Tap a piece to see legal moves.');
+</script>
+</body>
+</html>

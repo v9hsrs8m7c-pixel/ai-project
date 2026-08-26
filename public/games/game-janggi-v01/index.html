@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Janggi — 포진 선택판 (완전판)</title>
+<style>
+  :root{
+    --bg:#f3e0bf;
+    --board:#e7caa1;
+    --line:#1e1e1e;
+    --han-red:#b83333;
+    --cho-green:#1b7f6a;
+    --muted:#555;
+    --panel:#fff;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);font-family:"Noto Serif KR",serif;color:#222}
+  .app{display:flex;gap:12px;padding:14px;box-sizing:border-box;height:100%;}
+  .left{flex:1;display:flex;flex-direction:column;align-items:center;}
+  canvas{background:var(--board);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.12);}
+  .ui{width:360px;display:flex;flex-direction:column;gap:10px;}
+  .panel{background:var(--panel);border-radius:10px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.06);}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  button{padding:8px 10px;border-radius:6px;border:1px solid #ddd;background:#fafafa;cursor:pointer;}
+  .moves{height:260px;overflow:auto;padding:6px;border-radius:6px;background:#f7f7f7;border:1px solid #eee;font-size:13px;}
+  label.small{font-size:13px;color:var(--muted)}
+  .muted{color:var(--muted);font-size:13px}
+  .note-list{margin:6px 0 0 18px;padding:0}
+  .note-list li{margin:6px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="left">
+    <canvas id="board" width="900" height="1000" role="img" aria-label="Janggi board"></canvas>
+    <div style="margin-top:8px" class="muted">Click a piece → highlight possible moves → click destination. Cho (green) moves first.</div>
+  </div>
+
+  <div class="ui">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <strong>Janggi — 포진 선택판</strong>
+          <div style="font-size:12px;color:var(--muted)">Full rules + formation chooser</div>
+          <div id="currForm" class="muted" style="font-size:12px;margin-top:2px"></div>
+        </div>
+        <div id="turnIndicator" style="font-weight:700;color:var(--muted)"></div>
+      </div>
+
+      <div style="margin-top:10px" class="row">
+        <button id="undoBtn">Undo</button>
+        <button id="redoBtn">Redo</button>
+        <button id="restartBtn">Restart</button>
+      </div>
+
+      <div style="margin-top:8px" class="row">
+        <label>Han 포진
+        <select id="hanFormation">
+          <option value="귀마">귀마</option>
+          <option value="변마">변마</option>
+          <option value="좌변마">좌변마</option>
+          <option value="우변마">우변마</option>
+        </select>
+        </label>
+        <label>Cho 포진
+          <select id="choFormation">
+          <option value="귀마">귀마</option>
+          <option value="변마">변마</option>
+          <option value="좌변마">좌변마</option>
+          <option value="우변마">우변마</option>
+          </select>
+        </label>
+      </div>
+
+      <div style="margin-top:8px" class="row">
+        <label class="small">Board scale <input id="scale" type="range" min="0.5" max="1.4" step="0.05" value="1"></label>
+      </div>
+
+      <div style="margin-top:10px">
+        <div style="font-size:13px;margin-bottom:6px">Move history</div>
+        <div id="moveList" class="moves" aria-live="polite"></div>
+      </div>
+
+      <div style="margin-top:8px;display:flex;gap:6px;">
+        <button id="saveBtn">Save</button>
+        <button id="loadBtn">Load</button>
+      </div>
+    </div>
+
+
+  </div>
+</div>
+
+<script>
+/* Complete single-file Janggi with 포진 selection
+   - Saves/loads board state
+   - Undo/Redo, Restart
+   - Formation buttons
+   - Face-to-face generals rule REMOVED
+   - Palace diagonals: ONLY corner<->center for CHA, GEN, SA (no edge diagonal)
+   - Cannon: cannot jump over or capture cannons; needs non-cannon screen
+*/
+
+/* ---------- Constants & globals ---------- */
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+
+const FILES = 9, RANKS = 10;
+const PAD = 72;
+const BASE_CELL = 80;
+const DPR = window.devicePixelRatio || 1;
+
+const PT = { CHA:'cha', MA:'ma', SANG:'sang', SA:'sa', GEN:'gen', PO:'po', SOLD:'sold' };
+const SIDES = { HAN:'han', CHO:'cho' };
+
+const HANJA = {
+  han: { [PT.GEN]:'漢', [PT.SA]:'士', [PT.CHA]:'車', [PT.PO]:'包', [PT.MA]:'馬', [PT.SANG]:'象', [PT.SOLD]:'兵' },
+  cho: { [PT.GEN]:'楚', [PT.SA]:'士', [PT.CHA]:'车', [PT.PO]:'包', [PT.MA]:'马', [PT.SANG]:'象', [PT.SOLD]:'卒' }
+};
+
+const SIZE_RATIO = {
+  [PT.GEN]: 1.00, [PT.CHA]:0.75, [PT.MA]:0.75, [PT.SANG]:0.75, [PT.SA]:0.75, [PT.PO]:0.75, [PT.SOLD]:0.50
+};
+
+const PALACE = new Set([
+  '3,0','4,0','5,0','3,1','4,1','5,1','3,2','4,2','5,2',
+  '3,7','4,7','5,7','3,8','4,8','5,8','3,9','4,9','5,9'
+]);
+
+// Palace diagonal adjacency graph (corner<->center edges only)
+const PALACE_EDGES = [
+  // top palace
+  ['3,0','4,1'], ['5,0','4,1'],
+  ['3,2','4,1'], ['5,2','4,1'],
+  // bottom palace
+  ['3,7','4,8'], ['5,7','4,8'],
+  ['3,9','4,8'], ['5,9','4,8'],
+];
+
+let cell = BASE_CELL, scale = 1, offsetX = 0, offsetY = 0;
+let board = new Map(); // key "x,y" => {side,type,moved}
+let turn = SIDES.CHO;
+let selected = null;
+let highlights = [];
+let undoStack = [];
+let redoStack = [];
+let moveHistory = [];
+
+let hanFormation = "귀마";
+let choFormation = "귀마";
+
+/* ---------- Helpers ---------- */
+function k(x,y){ return `${x},${y}`; }
+function pk(key){ const [x,y] = key.split(',').map(Number); return {x,y}; }
+function onBoard(x,y){ return x>=0 && x<FILES && y>=0 && y<RANKS; }
+function cloneMap(m){ const out = new Map(); for(const [key,val] of m.entries()) out.set(key, {...val}); return out; }
+
+/* ---------- Layout & rendering ---------- */
+function recalc(){
+  cell = Math.round(BASE_CELL * scale);
+  const totalW = (FILES-1) * cell;
+  const totalH = (RANKS-1) * cell;
+  const cssW = totalW + PAD*2;
+  const cssH = totalH + PAD*2;
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width = Math.round(cssW * DPR);
+  canvas.height = Math.round(cssH * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  offsetX = PAD; offsetY = PAD;
+}
+document.getElementById('scale').addEventListener('input', (e)=>{ scale = parseFloat(e.target.value); recalc(); render(); });
+
+function toPixel(x,y){ return { cx: offsetX + x*cell, cy: offsetY + y*cell }; }
+
+function drawPalace(centerFile, topRank){
+  const left = centerFile - 1;
+  const right = centerFile + 1;
+  const top = topRank;
+  const bottom = topRank + 2;
+  const a = toPixel(left, top);
+  const b = toPixel(right, bottom);
+  const c = toPixel(right, top);
+  const d = toPixel(left, bottom);
+  ctx.beginPath(); ctx.moveTo(a.cx,a.cy); ctx.lineTo(b.cx,b.cy);
+  ctx.moveTo(c.cx,c.cy); ctx.lineTo(d.cx,d.cy); ctx.stroke();
+}
+
+function drawPiece(x, y, p) {
+  const { cx, cy } = toPixel(x, y);
+  const ratio = SIZE_RATIO[p.type] || 0.72;
+  const r = (cell * ratio) / 2;
+
+  // octagon
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI / 4) * i - Math.PI / 8;
+    const px = cx + r * Math.cos(angle);
+    const py = cy + r * Math.sin(angle);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = p.side === SIDES.HAN ? '#fff4f4' : '#f0fff4';
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.2, 1.9 * scale);
+  ctx.strokeStyle = p.side === SIDES.HAN ? '#b73333' : '#0b7a57';
+  ctx.stroke();
+
+  // text
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const family = p.side === SIDES.HAN
+    ? '"Noto Serif KR","Nanum Myeongjo",serif'
+    : '"Nanum Brush Script","Nanum Pen Script",cursive';
+  ctx.font = `bold ${Math.round(r * 1.0)}px ${family}`;
+  const ch = HANJA[p.side][p.type];
+  ctx.fillStyle = p.side === SIDES.HAN ? '#b00000' : '#0b6b44';
+  ctx.fillText(ch, cx, cy);
+}
+
+function render(){
+  ctx.clearRect(0,0,canvas.width/DPR, canvas.height/DPR);
+
+  // grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.lineWidth = Math.max(1.6, 2 * scale);
+  for(let i=0;i<FILES;i++){
+    const x = offsetX + i*cell;
+    ctx.beginPath(); ctx.moveTo(x, offsetY); ctx.lineTo(x, offsetY + (RANKS-1)*cell); ctx.stroke();
+  }
+  for(let j=0;j<RANKS;j++){
+    const y = offsetY + j*cell;
+    ctx.beginPath(); ctx.moveTo(offsetX, y); ctx.lineTo(offsetX + (FILES-1)*cell, y); ctx.stroke();
+  }
+
+  // palaces
+  ctx.lineWidth = Math.max(1.2, 1.6 * scale);
+  drawPalace(4,0); drawPalace(4,7);
+
+  // intersection dots
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  for(let y=0;y<RANKS;y++) for(let x=0;x<FILES;x++){
+    const {cx,cy} = toPixel(x,y);
+    ctx.beginPath(); ctx.arc(cx,cy,2,0,Math.PI*2); ctx.fill();
+  }
+
+  // highlights
+  if(highlights.length){
+    ctx.save();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = '#66a3ff';
+    for(const h of highlights){
+      const {x,y} = pk(h);
+      const {cx,cy} = toPixel(x,y);
+      ctx.beginPath(); ctx.arc(cx,cy, (cell * 0.26), 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // pieces
+  for(const [pos,piece] of board.entries()){
+    const {x,y} = pk(pos);
+    drawPiece(x,y,piece);
+  }
+
+  // selection ring
+  if(selected){
+    const s = pk(selected);
+    const {cx,cy} = toPixel(s.x,s.y);
+    ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = 'gold'; ctx.arc(cx,cy, cell*0.42,0,Math.PI*2); ctx.stroke();
+  }
+}
+
+// Dropdown listeners for formation selection
+const hanSelect = document.getElementById('hanFormation');
+const choSelect = document.getElementById('choFormation');
+
+hanSelect.value = hanFormation;
+choSelect.value = choFormation;
+
+hanSelect.addEventListener('change', ()=>{
+  hanFormation = hanSelect.value;
+  setupStart();
+});
+
+choSelect.addEventListener('change', ()=>{
+  choFormation = choSelect.value;
+  setupStart();
+});
+
+
+/* ---------- Setup start position ---------- */
+function backRankFromFormation(f){
+  switch(f){
+    case "변마": // horses outside, elephants inside
+      return [PT.CHA, PT.SANG, PT.MA, PT.SA, PT.GEN, PT.SA, PT.MA, PT.SANG, PT.CHA];
+    case "좌변마": // left side swapped
+      return [PT.CHA, PT.SANG, PT.MA, PT.SA, PT.GEN, PT.SA, PT.SANG, PT.MA, PT.CHA];
+    case "우변마": // right side swapped
+      return [PT.CHA, PT.MA, PT.SANG, PT.SA, PT.GEN, PT.SA, PT.MA, PT.SANG, PT.CHA];
+    case "귀마":
+    default:
+      return [PT.CHA, PT.MA, PT.SANG, PT.SA, PT.GEN, PT.SA, PT.SANG, PT.MA, PT.CHA];
+  }
+}
+
+function setupStart(){
+  board = new Map();
+
+  const backHan = backRankFromFormation(hanFormation);
+  const backCho = backRankFromFormation(choFormation);
+
+  // Han (top)
+  for(let x=0;x<9;x++){
+    if(backHan[x] !== PT.GEN) board.set(k(x,0), { side: SIDES.HAN, type: backHan[x], moved:false });
+  }
+  board.set(k(4,1), { side: SIDES.HAN, type: PT.GEN, moved:false });
+  board.set(k(1,2), { side: SIDES.HAN, type: PT.PO, moved:false });
+  board.set(k(7,2), { side: SIDES.HAN, type: PT.PO, moved:false });
+  [0,2,4,6,8].forEach(f => board.set(k(f,3), { side: SIDES.HAN, type: PT.SOLD, moved:false }));
+
+  // Cho (bottom)
+  for(let x=0;x<9;x++){
+    if(backCho[x] !== PT.GEN) board.set(k(x,9), { side: SIDES.CHO, type: backCho[x], moved:false });
+  }
+  board.set(k(4,8), { side: SIDES.CHO, type: PT.GEN, moved:false });
+  board.set(k(1,7), { side: SIDES.CHO, type: PT.PO, moved:false });
+  board.set(k(7,7), { side: SIDES.CHO, type: PT.PO, moved:false });
+  [0,2,4,6,8].forEach(f => board.set(k(f,6), { side: SIDES.CHO, type: PT.SOLD, moved:false }));
+
+  // reset state
+  turn = SIDES.CHO;
+  selected = null; highlights = [];
+  undoStack = []; redoStack = []; moveHistory = [];
+  recalc(); render(); updateUI();
+}
+
+/* ---------- Move generation (full rules) ---------- */
+
+// Rook/Chariot orthogonals
+function genRookMoves(x,y,side){
+  const moves = [];
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    let nx = x + dx, ny = y + dy;
+    while(onBoard(nx,ny)){
+      const keyp = k(nx,ny);
+      if(!board.has(keyp)) moves.push(keyp);
+      else { if(board.get(keyp).side !== side) moves.push(keyp); break; }
+      nx += dx; ny += dy;
+    }
+  }
+  return moves;
+}
+
+// Palace diagonal for chariot: ONLY adjacent edges (corner<->center), no corner<->corner in one move
+function genChariotPalaceDiagAdjacent(x,y,side){
+  const here = k(x,y);
+  const res = [];
+  for(const [a,b] of PALACE_EDGES){
+    let from=null,to=null;
+    if(here===a){ from=a; to=b; }
+    else if(here===b){ from=b; to=a; }
+    if(from){
+      const occ = board.get(to);
+      if(!occ) res.push(to);
+      else if(occ.side !== side) res.push(to);
+    }
+  }
+  return res;
+}
+
+// Horse with blocking
+function genHorseMoves(x,y){
+  const out = [];
+  const patterns = [
+    {block:[0,1], to:[1,2]}, {block:[0,1], to:[-1,2]},  // forward
+    {block:[0,-1], to:[1,-2]}, {block:[0,-1], to:[-1,-2]}, // backward
+    {block:[1,0], to:[2,1]}, {block:[1,0], to:[2,-1]}, // right
+    {block:[-1,0], to:[-2,1]}, {block:[-1,0], to:[-2,-1]} // left
+  ];
+  for(const p of patterns){
+    const bx = x + p.block[0], by = y + p.block[1];
+    const tx = x + p.to[0], ty = y + p.to[1];
+    if(!onBoard(tx,ty)) continue;
+    if(board.has(k(bx,by))) continue;  // leg is blocked
+    if(board.has(k(tx,ty)) && board.get(k(tx,ty)).side === board.get(k(x,y)).side) continue; // friendly piece
+    out.push(k(tx,ty));
+  }
+  return out;
+}
+
+// Elephant with two blockers
+function genElephantMoves(x,y){
+  const out = [];
+  const patterns = [
+    {b1:[1,0], b2:[2,1], to:[3,2]},{b1:[1,0], b2:[2,-1], to:[3,-2]},
+    {b1:[-1,0], b2:[-2,1], to:[-3,2]},{b1:[-1,0], b2:[-2,-1], to:[-3,-2]},
+    {b1:[0,1], b2:[1,2], to:[2,3]},{b1:[0,1], b2:[-1,2], to:[-2,3]},
+    {b1:[0,-1], b2:[1,-2], to:[2,-3]},{b1:[0,-1], b2:[-1,-2], to:[-2,-3]}
+  ];
+  for(const p of patterns){
+    const b1x = x + p.b1[0], b1y = y + p.b1[1];
+    const b2x = x + p.b2[0], b2y = y + p.b2[1];
+    const tx = x + p.to[0], ty = y + p.to[1];
+    if(!onBoard(tx,ty)) continue;
+    if(board.has(k(b1x,b1y)) || board.has(k(b2x,b2y))) continue;
+    out.push(k(tx,ty));
+  }
+  return out;
+}
+
+// Cannon: cannot jump over cannons; cannot capture cannons.
+// Must first encounter a NON-cannon screen; may move through empties after that screen; capture the first NON-cannon piece.
+function genCannonMoves(x,y,side){
+  const out = [];
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    let nx = x + dx, ny = y + dy;
+    let screen = false;
+    while(onBoard(nx,ny)){
+      const kp = k(nx,ny);
+      const occ = board.get(kp);
+
+      if(!screen){
+        if(!occ){
+          // before screen, cannon cannot move
+          nx += dx; ny += dy; continue;
+        }
+        // encountered a piece before screen
+        if(occ.type === PT.PO){
+          // cannon cannot jump over cannon -> hard block
+          break;
+        } else {
+          // valid screen (non-cannon)
+          screen = true;
+          nx += dx; ny += dy;
+          continue;
+        }
+      } else {
+        // after the screen
+        if(!occ){
+          // may move to empty squares after a valid screen
+          out.push(kp);
+          nx += dx; ny += dy; continue;
+        } else {
+          // first piece after screen: capture allowed ONLY if not a cannon and not same side
+          if(occ.side !== side && occ.type !== PT.PO){
+            out.push(kp);
+          }
+          break; // stop in all cases at the first piece after screen
+        }
+      }
+    }
+  }
+  // Palace diagonal for cannon is disabled (to forbid edge-to-edge styles).
+  return out;
+}
+
+// ---------- General/Guard (true palace diagonals: only corner<->center) ----------
+function inPalace(key){ return PALACE.has(key); }
+
+function isOrthStep(x,y,nx,ny){ return Math.abs(nx-x)+Math.abs(ny-y) === 1; }
+
+function isPalaceDiagonalAdjacent(fromKey,toKey){
+  for(const [a,b] of PALACE_EDGES){
+    if((fromKey===a && toKey===b) || (fromKey===b && toKey===a)) return true;
+  }
+  return false;
+}
+
+function genGuardMoves(x,y,side){
+  const res = [];
+  const fromKey = k(x,y);
+
+  // Orthogonal one step inside palace
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    const nx = x + dx, ny = y + dy, toKey = k(nx,ny);
+    if(onBoard(nx,ny) && inPalace(fromKey) && inPalace(toKey)){
+      res.push(toKey);
+    }
+  }
+
+  // Diagonal only if (from,to) is a palace corner<->center edge
+  for(const [dx,dy] of [[1,1],[1,-1],[-1,1],[-1,-1]]){
+    const nx = x + dx, ny = y + dy, toKey = k(nx,ny);
+    if(onBoard(nx,ny) && inPalace(fromKey) && inPalace(toKey) && isPalaceDiagonalAdjacent(fromKey,toKey)){
+      res.push(toKey);
+    }
+  }
+  return res;
+}
+function genGeneralMoves(x,y,side){ return genGuardMoves(x,y,side); }
+
+// Soldier moves
+function genSoldierMoves(x,y,side){
+  const res = [];
+  const forward = (side === SIDES.CHO) ? -1 : 1;
+  const tryPush = (nx,ny)=>{ if(onBoard(nx,ny)) res.push(k(nx,ny)); };
+  tryPush(x, y + forward); // forward
+  tryPush(x-1, y); tryPush(x+1, y); // sideways
+  // diagonal forward inside enemy palace
+  if(side === SIDES.CHO && y <= 2){
+    tryPush(x-1, y-1); tryPush(x+1, y-1);
+  }
+  if(side === SIDES.HAN && y >= 7){
+    tryPush(x-1, y+1); tryPush(x+1, y+1);
+  }
+  return res;
+}
+
+/* ---------- Pseudo moves used for attack detection ---------- */
+function generatePseudoMovesFor(posKey, piece){
+  const {x,y} = pk(posKey);
+  switch(piece.type){
+    case PT.CHA: { let a = genRookMoves(x,y,piece.side); return a.concat(genChariotPalaceDiagAdjacent(x,y,piece.side)); }
+    case PT.MA: return genHorseMoves(x,y);
+    case PT.SANG: return genElephantMoves(x,y);
+    case PT.PO: return genCannonMoves(x,y,piece.side); // palace diag disabled
+    case PT.SA: return genGuardMoves(x,y,piece.side);
+    case PT.GEN: return genGeneralMoves(x,y,piece.side);
+    case PT.SOLD: return genSoldierMoves(x,y,piece.side);
+    default: return [];
+  }
+}
+
+/* ---------- Check detection ---------- */
+function isInCheckForMap(map, side){
+  let genPos = null;
+  for(const [pos,p] of map.entries()){
+    if(p.side === side && p.type === PT.GEN){ genPos = pk(pos); break; }
+  }
+  if(!genPos) return false;
+  const saveBoard = board;
+  board = map;
+  for(const [pos,p] of map.entries()){
+    if(p.side === side) continue;
+    const attacks = generatePseudoMovesFor(pos, p);
+    if(attacks.includes(k(genPos.x, genPos.y))){ board = saveBoard; return true; }
+  }
+  board = saveBoard;
+  return false;
+}
+
+/* ---------- (Note) generalsFaceInMap exists but we purposely don't use it for legality ---------- */
+function generalsFaceInMap(map){
+  let g1=null, g2=null;
+  for(const [pos,p] of map.entries()){
+    if(p.type === PT.GEN){
+      if(!g1) g1 = { pos: pk(pos), side: p.side };
+      else g2 = { pos: pk(pos), side: p.side };
+    }
+  }
+  if(!g1 || !g2) return false;
+  if(g1.pos.x !== g2.pos.x) return false;
+  const minY = Math.min(g1.pos.y, g2.pos.y), maxY = Math.max(g1.pos.y, g2.pos.y);
+  for(let yy=minY+1; yy<maxY; yy++) if(map.has(k(g1.pos.x, yy))) return false;
+  return true;
+}
+
+/* ---------- Legal move generation ---------- */
+function generateLegalMoves(fromKey){
+  const piece = board.get(fromKey);
+  if(!piece) return [];
+  const {x,y} = pk(fromKey);
+  let raw = [];
+  switch(piece.type){
+    case PT.CHA:
+      raw = genRookMoves(x,y,piece.side);
+      raw = raw.concat(genChariotPalaceDiagAdjacent(x,y,piece.side));
+      break;
+    case PT.MA: raw = genHorseMoves(x,y); break;
+    case PT.SANG: raw = genElephantMoves(x,y); break;
+    case PT.PO: raw = genCannonMoves(x,y,piece.side); break; // no palace diag
+    case PT.SA: raw = genGuardMoves(x,y,piece.side); break;
+    case PT.GEN: raw = genGeneralMoves(x,y,piece.side); break;
+    case PT.SOLD: raw = genSoldierMoves(x,y,piece.side); break;
+  }
+
+  raw = raw.filter(destKey => {
+    const dest = board.get(destKey);
+    if(dest && dest.side === piece.side) return false;
+    // simulate move to ensure not leaving own general in check
+    const sim = cloneMap(board);
+    sim.delete(fromKey);
+    sim.set(destKey, {...piece, moved:true});
+    // NOTE: We intentionally DO NOT reject moves because of generalsFaceInMap(sim)
+    if(isInCheckForMap(sim, piece.side)) return false;
+    return true;
+  });
+  return Array.from(new Set(raw));
+}
+
+/* ---------- Move execution & history ---------- */
+function pushUndo(){
+  undoStack.push({ board: cloneMap(board), turn, moveHistory: [...moveHistory] });
+  if(undoStack.length > 512) undoStack.shift();
+}
+function performMove(fromKey, toKey){
+  const moving = board.get(fromKey);
+  const captured = board.get(toKey) || null;
+  board.delete(fromKey);
+  board.set(toKey, {...moving, moved:true});
+  moveHistory.push({
+    side: moving.side,
+    type: moving.type,
+    from: fromKey,
+    to: toKey,
+    capture: captured ? captured.type : null,
+    time: new Date().toISOString()
+  });
+  redoStack = [];
+}
+
+/* ---------- Post-move checks ---------- */
+function hasAnyLegalMove(side){
+  for(const [pos,p] of board.entries()){
+    if(p.side !== side) continue;
+    const moves = generateLegalMoves(pos);
+    if(moves.length > 0) return true;
+  }
+  return false;
+}
+function postMoveChecks(){
+  const opponent = (turn === SIDES.CHO) ? SIDES.HAN : SIDES.CHO;
+  if(isInCheckForMap(board, opponent)){
+    if(!hasAnyLegalMove(opponent)){
+      setTimeout(()=> alert(`${opponent.toUpperCase()} is checkmated!`), 30);
+    } else {
+      console.log(opponent, 'in check');
+    }
+  }
+}
+
+/* ---------- Input handling ---------- */
+canvas.addEventListener('click', (ev)=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = ev.clientX - rect.left;
+  const my = ev.clientY - rect.top;
+  const col = Math.round((mx - offsetX) / cell);
+  const row = Math.round((my - offsetY) / cell);
+  if(!onBoard(col,row)) return;
+  const pos = k(col,row);
+  const piece = board.get(pos);
+  if(selected){
+    if(highlights.includes(pos)){
+      pushUndo();
+      performMove(selected,pos);
+      selected = null; highlights = [];
+      // switch turn
+      turn = (turn === SIDES.CHO) ? SIDES.HAN : SIDES.CHO;
+      postMoveChecks();
+      render(); updateUI();
+      return;
+    }
+    if(piece && piece.side === turn){
+      selected = pos; highlights = generateLegalMoves(pos); render(); return;
+    }
+    selected = null; highlights = []; render(); return;
+  } else {
+    if(piece && piece.side === turn){
+      selected = pos; highlights = generateLegalMoves(pos); render(); return;
+    }
+  }
+});
+
+/* ---------- Undo / Redo / Restart / Save / Load UI ---------- */
+document.getElementById('undoBtn').addEventListener('click', ()=>{
+  if(undoStack.length === 0) return;
+  const snap = undoStack.pop();
+  redoStack.push({ board: cloneMap(board), turn, moveHistory: [...moveHistory] });
+  board = cloneMap(snap.board);
+  turn = snap.turn;
+  moveHistory = snap.moveHistory;
+  selected = null; highlights = [];
+  render(); updateUI();
+});
+document.getElementById('redoBtn').addEventListener('click', ()=>{
+  if(redoStack.length === 0) return;
+  const snap = redoStack.pop();
+  undoStack.push({ board: cloneMap(board), turn, moveHistory: [...moveHistory] });
+  board = cloneMap(snap.board);
+  turn = snap.turn;
+  moveHistory = snap.moveHistory;
+  selected = null; highlights = [];
+  render(); updateUI();
+});
+document.getElementById('restartBtn').addEventListener('click', ()=>{
+  if(confirm('Restart and keep current formations? (Cancel to choose new formations)')){
+    setupStart();
+  } else {
+    const hf = prompt('Han 포진 (귀마 / 변마 / 좌변마 / 우변마):', hanFormation) || hanFormation;
+    const cf = prompt('Cho 포진 (귀마 / 변마 / 좌변마 / 우변마):', choFormation) || choFormation;
+    const valid = ["귀마","변마","좌변마","우변마"];
+    if(valid.includes(hf)) hanFormation = hf;
+    if(valid.includes(cf)) choFormation = cf;
+    document.getElementById('currForm').textContent = `Han=${hanFormation}, Cho=${choFormation}`;
+    setupStart();
+  }
+});
+
+/* Save */
+document.getElementById('saveBtn').addEventListener('click', ()=>{
+  const hanName = prompt('Han (Red) player name:','Han') || 'Han';
+  const choName = prompt('Cho (Green) player name:','Cho') || 'Cho';
+  const arr = [];
+  for(const [pos,p] of board.entries()) arr.push({ pos, side: p.side, type: p.type, moved: !!p.moved });
+  const data = { date: new Date().toISOString(), hanPlayer: hanName, choPlayer: choName, turn, hanFormation, choFormation, board: arr, moveHistory };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'janggi_save.json'; a.click(); URL.revokeObjectURL(url);
+});
+
+/* Load */
+document.getElementById('loadBtn').addEventListener('click', ()=>{
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = (e) => {
+    const f = e.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const data = JSON.parse(r.result);
+        if(Array.isArray(data.board)){
+          board = new Map();
+          for(const it of data.board) board.set(it.pos, { side: it.side, type: it.type, moved: !!it.moved });
+        }
+        moveHistory = data.moveHistory || [];
+        turn = data.turn || SIDES.CHO;
+        hanFormation = data.hanFormation || hanFormation;
+        choFormation = data.choFormation || choFormation;
+        document.getElementById('currForm').textContent = `Han=${hanFormation}, Cho=${choFormation}`;
+        selected = null; highlights = []; undoStack = []; redoStack = [];
+        recalc(); render(); updateUI();
+      } catch(err){ alert('Invalid file.'); }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+});
+
+/* ---------- UI helpers ---------- */
+function updateUI(){
+  document.getElementById('turnIndicator').textContent = (turn === SIDES.CHO) ? 'Cho (Green) to move' : 'Han (Red) to move';
+  const ml = document.getElementById('moveList');
+  ml.innerHTML = '';
+  for(let i=0;i<moveHistory.length;i++){
+    const m = moveHistory[i];
+    const li = document.createElement('div');
+    li.textContent = `${i+1}. ${m.side} ${m.type} ${m.from} → ${m.to}` + (m.capture ? ` x ${m.capture}` : '');
+    ml.appendChild(li);
+  }
+  document.getElementById('currForm').textContent = `Han=${hanFormation}, Cho=${choFormation}`;
+}
+
+/* ---------- Init ---------- */
+recalc();
+setupStart();
+render();
+updateUI();
+
+/* Expose for debugging */
+window.__janggi = { board, render, setupStart, generateLegalMoves, hanFormation, choFormation };
+
+</script>
+</body>
+</html>

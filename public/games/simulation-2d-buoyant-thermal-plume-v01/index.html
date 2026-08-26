@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>2D Buoyant Thermal Plume (Navier–Stokes)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #eee;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+    }
+
+    #container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 1rem;
+    }
+
+    canvas {
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      image-rendering: pixelated;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.4rem 0.9rem;
+      cursor: pointer;
+      font-weight: 600;
+      background: #2d6cdf;
+      color: white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+
+    button:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    input[type="range"] {
+      cursor: pointer;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #9fb5ff;
+    }
+
+    small {
+      opacity: 0.7;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>2D Buoyant Thermal Plume</h1>
+    <small>Simple Navier–Stokes + Boussinesq approximation (JS, HTML canvas)</small>
+    <canvas id="fluid" width="300" height="600"></canvas>
+    <div class="controls">
+      <button id="resetBtn">Reset</button>
+      <label>
+        Buoyancy
+        <input id="buoyancySlider" type="range" min="0" max="40" value="20" />
+      </label>
+      <label>
+        Viscosity
+        <input id="viscositySlider" type="range" min="0" max="30" value="4" />
+      </label>
+      <label>
+        Heat Input
+        <input id="heatSlider" type="range" min="0" max="100" value="40" />
+      </label>
+    </div>
+  </div>
+
+  <script>
+    // ---------------------------
+    // Grid + helper functions
+    // ---------------------------
+    const NX = 60; // grid cells in x
+    const NY = 120; // grid cells in y
+    const ITER = 15; // iterations for Poisson solves
+
+    const canvas = document.getElementById("fluid");
+    const ctx = canvas.getContext("2d");
+    const imgData = ctx.createImageData(canvas.width, canvas.height);
+
+    const resetBtn = document.getElementById("resetBtn");
+    const buoyancySlider = document.getElementById("buoyancySlider");
+    const viscositySlider = document.getElementById("viscositySlider");
+    const heatSlider = document.getElementById("heatSlider");
+
+    const size = (NX + 2) * (NY + 2); // with 1-cell boundary padding
+
+    // Field arrays
+    let u = new Float32Array(size);      // x-velocity
+    let v = new Float32Array(size);      // y-velocity
+    let u_prev = new Float32Array(size);
+    let v_prev = new Float32Array(size);
+
+    let T = new Float32Array(size);      // temperature
+    let T_prev = new Float32Array(size); // temp source
+
+    let p = new Float32Array(size);      // pressure
+    let div = new Float32Array(size);    // divergence
+
+    const T_ambient = 0.0;
+
+    let dt = 0.05;
+
+    function IX(i, j) {
+      return i + (NX + 2) * j;
+    }
+
+    function clearArray(arr) {
+      arr.fill(0);
+    }
+
+    // ---------------------------
+    // Boundary conditions
+    // ---------------------------
+    function set_bnd(b, x) {
+      for (let i = 1; i <= NX; i++) {
+        x[IX(i, 0)]     = b === 2 ? -x[IX(i, 1)]     : x[IX(i, 1)];      // bottom
+        x[IX(i, NY + 1)] = b === 2 ? -x[IX(i, NY)]   : x[IX(i, NY)];     // top
+      }
+      for (let j = 1; j <= NY; j++) {
+        x[IX(0, j)]     = b === 1 ? -x[IX(1, j)]     : x[IX(1, j)];      // left
+        x[IX(NX + 1, j)] = b === 1 ? -x[IX(NX, j)]   : x[IX(NX, j)];     // right
+      }
+
+      // Corners
+      x[IX(0, 0)]               = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
+      x[IX(0, NY + 1)]          = 0.5 * (x[IX(1, NY + 1)] + x[IX(0, NY)]);
+      x[IX(NX + 1, 0)]          = 0.5 * (x[IX(NX, 0)] + x[IX(NX + 1, 1)]);
+      x[IX(NX + 1, NY + 1)]     = 0.5 * (x[IX(NX, NY + 1)] + x[IX(NX + 1, NY)]);
+    }
+
+    // ---------------------------
+    // Linear solver (Gauss–Seidel)
+    // ---------------------------
+    function lin_solve(b, x, x0, a, c) {
+      const cInv = 1.0 / c;
+      for (let k = 0; k < ITER; k++) {
+        for (let j = 1; j <= NY; j++) {
+          for (let i = 1; i <= NX; i++) {
+            x[IX(i, j)] = (
+              x0[IX(i, j)]
+              + a * (
+                x[IX(i - 1, j)] +
+                x[IX(i + 1, j)] +
+                x[IX(i, j - 1)] +
+                x[IX(i, j + 1)]
+              )
+            ) * cInv;
+          }
+        }
+        set_bnd(b, x);
+      }
+    }
+
+    // ---------------------------
+    // Diffusion
+    // ---------------------------
+    function diffuse(b, x, x0, diff, dt) {
+      const a = dt * diff * NX * NY;
+      lin_solve(b, x, x0, a, 1 + 4 * a);
+    }
+
+    // ---------------------------
+    // Advection
+    // ---------------------------
+    function advect(b, d, d0, u, v, dt) {
+      const dt0x = dt * NX;
+      const dt0y = dt * NY;
+
+      for (let j = 1; j <= NY; j++) {
+        for (let i = 1; i <= NX; i++) {
+          let x = i - dt0x * u[IX(i, j)];
+          let y = j - dt0y * v[IX(i, j)];
+
+          if (x < 0.5) x = 0.5;
+          if (x > NX + 0.5) x = NX + 0.5;
+          if (y < 0.5) y = 0.5;
+          if (y > NY + 0.5) y = NY + 0.5;
+
+          const i0 = Math.floor(x);
+          const i1 = i0 + 1;
+          const j0 = Math.floor(y);
+          const j1 = j0 + 1;
+
+          const s1 = x - i0;
+          const s0 = 1 - s1;
+          const t1 = y - j0;
+          const t0 = 1 - t1;
+
+          d[IX(i, j)] =
+            s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
+            s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
+        }
+      }
+      set_bnd(b, d);
+    }
+
+    // ---------------------------
+    // Projection (make velocity divergence-free)
+    // ---------------------------
+    function project(u, v, p, div) {
+      const h = 1.0 / NX; // assume square-ish cells
+
+      for (let j = 1; j <= NY; j++) {
+        for (let i = 1; i <= NX; i++) {
+          div[IX(i, j)] = -0.5 * h * (
+            u[IX(i + 1, j)] - u[IX(i - 1, j)] +
+            v[IX(i, j + 1)] - v[IX(i, j - 1)]
+          );
+          p[IX(i, j)] = 0;
+        }
+      }
+
+      set_bnd(0, div);
+      set_bnd(0, p);
+
+      lin_solve(0, p, div, 1, 4);
+
+      for (let j = 1; j <= NY; j++) {
+        for (let i = 1; i <= NX; i++) {
+          u[IX(i, j)] -= 0.5 * (p[IX(i + 1, j)] - p[IX(i - 1, j)]) / h;
+          v[IX(i, j)] -= 0.5 * (p[IX(i, j + 1)] - p[IX(i, j - 1)]) / h;
+        }
+      }
+
+      set_bnd(1, u);
+      set_bnd(2, v);
+    }
+
+    // ---------------------------
+    // Add source to a field
+    // ---------------------------
+    function add_source(x, s, dt) {
+      for (let i = 0; i < size; i++) {
+        x[i] += dt * s[i];
+      }
+    }
+
+    // ---------------------------
+    // Velocity step
+    // ---------------------------
+    function vel_step(u, v, u0, v0, visc, dt) {
+      add_source(u, u0, dt);
+      add_source(v, v0, dt);
+
+      // swap and diffuse
+      [u, u0] = [u0, u];
+      diffuse(1, u, u0, visc, dt);
+
+      [v, v0] = [v0, v];
+      diffuse(2, v, v0, visc, dt);
+
+      project(u, v, p, div);
+
+      [u, u0] = [u0, u];
+      [v, v0] = [v0, v];
+
+      advect(1, u, u0, u0, v0, dt);
+      advect(2, v, v0, u0, v0, dt);
+
+      project(u, v, p, div);
+    }
+
+    // ---------------------------
+    // Temperature step
+    // ---------------------------
+    function temp_step(T, T0, diff, dt) {
+      add_source(T, T0, dt);
+
+      [T, T0] = [T0, T];
+      diffuse(0, T, T0, diff, dt);
+
+      [T, T0] = [T0, T];
+      advect(0, T, T0, u, v, dt);
+
+      // enforce boundaries (no-flux)
+      set_bnd(0, T);
+    }
+
+    // ---------------------------
+    // Buoyancy (Boussinesq)
+    // v_t += g * beta * (T - T_ambient)
+    // ---------------------------
+    function apply_buoyancy() {
+      const buoyancy = parseFloat(buoyancySlider.value) / 1000.0; // scale
+      for (let j = 1; j <= NY; j++) {
+        for (let i = 1; i <= NX; i++) {
+          const idx = IX(i, j);
+          const t = T[idx];
+          const f = buoyancy * (t - T_ambient);
+          // y-axis goes downward, so negative force is "up"
+          v[idx] -= f;
+        }
+      }
+    }
+
+    // ---------------------------
+    // Heating source at bottom center
+    // ---------------------------
+    function add_heat_source() {
+      const heatStrength = parseFloat(heatSlider.value) / 10.0;
+
+      const radius = 6;
+      const cx = Math.floor(NX / 2);
+      const cy = NY - 6; // near bottom
+
+      clearArray(T_prev);
+
+      for (let j = -radius; j <= radius; j++) {
+        for (let i = -radius; i <= radius; i++) {
+          const x = cx + i;
+          const y = cy + j;
+          if (x < 1 || x > NX || y < 1 || y > NY) continue;
+
+          if (i * i + j * j <= radius * radius) {
+            T_prev[IX(x, y)] = heatStrength;
+          }
+        }
+      }
+    }
+
+    // ---------------------------
+    // Visualization
+    // Use temperature field mapped to color
+    // ---------------------------
+    function draw() {
+      const w = canvas.width;
+      const h = canvas.height;
+      const cellW = w / NX;
+      const cellH = h / NY;
+
+      // For each pixel, sample nearest grid T
+      const data = imgData.data;
+
+      for (let py = 0; py < h; py++) {
+        const gy = Math.floor((py / h) * NY) + 1; // +1 for padding
+        for (let px = 0; px < w; px++) {
+          const gx = Math.floor((px / w) * NX) + 1;
+          const idxGrid = IX(gx, gy);
+
+          // Normalize temperature to [0,1] for color mapping
+          let t = T[idxGrid];
+          t = Math.max(0, Math.min(1, t / 10.0)); // 10 is arbitrary scaling
+
+          // simple "fire" colormap: black -> red -> yellow -> white
+          const r = Math.min(255, 255 * t + 80 * t);
+          const g = Math.min(255, 200 * t * t);
+          const b = Math.min(255, 80 * t * (1 - t) * 2);
+
+          const idx = 4 * (px + py * w);
+          data[idx] = r;
+          data[idx + 1] = g;
+          data[idx + 2] = b;
+          data[idx + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    // ---------------------------
+    // Reset
+    // ---------------------------
+    function resetSimulation() {
+      clearArray(u);
+      clearArray(v);
+      clearArray(u_prev);
+      clearArray(v_prev);
+      clearArray(T);
+      clearArray(T_prev);
+      clearArray(p);
+      clearArray(div);
+    }
+
+    resetBtn.addEventListener("click", resetSimulation);
+
+    // ---------------------------
+    // Main loop
+    // ---------------------------
+    let lastTime = performance.now();
+
+    function step(now) {
+      const elapsed = (now - lastTime) / 1000;
+      lastTime = now;
+
+      const visc = parseFloat(viscositySlider.value) / 1000.0;
+      const diffT = 0.0001;
+
+      // 1. add heat source to T_prev
+      add_heat_source();
+
+      // 2. temperature step
+      temp_step(T, T_prev, diffT, dt);
+
+      // 3. apply buoyancy force using T
+      apply_buoyancy();
+
+      // 4. velocity step
+      clearArray(u_prev);
+      clearArray(v_prev);
+      vel_step(u, v, u_prev, v_prev, visc, dt);
+
+      // 5. draw
+      draw();
+
+      requestAnimationFrame(step);
+    }
+
+    // Mouse: inject extra heat where clicked (optional)
+    canvas.addEventListener("mousemove", (e) => {
+      if (e.buttons !== 1) return; // only when left button pressed
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const gx = Math.floor((x / canvas.width) * NX) + 1;
+      const gy = Math.floor((y / canvas.height) * NY) + 1;
+
+      const radius = 3;
+      for (let j = -radius; j <= radius; j++) {
+        for (let i = -radius; i <= radius; i++) {
+          const xx = gx + i;
+          const yy = gy + j;
+          if (xx < 1 || xx > NX || yy < 1 || yy > NY) continue;
+          if (i * i + j * j <= radius * radius) {
+            T[IX(xx, yy)] += 5.0;
+          }
+        }
+      }
+    });
+
+    // Start
+    resetSimulation();
+    requestAnimationFrame(step);
+  </script>
+</body>
+</html>

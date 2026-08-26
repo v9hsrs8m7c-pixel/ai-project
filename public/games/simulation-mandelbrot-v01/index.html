@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Mandelbrot – Fast (Tiles + Worker + Blit)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; --panel: rgba(0,0,0,.55); --fg:#eee; }
+  html, body { margin:0; height:100%; overflow:hidden; background:#000; }
+  canvas#c { display:block; width:100vw; height:100vh; touch-action:none; }
+
+  /* Control panel */
+  #ui {
+    position: fixed; top: 12px; left: 12px; z-index: 20;
+    background: var(--panel); color: var(--fg); font: 12px/1.3 system-ui, sans-serif;
+    padding: 10px 12px; border-radius: 12px; backdrop-filter: blur(4px);
+    box-shadow: 0 2px 10px rgba(0,0,0,.35);
+    user-select: none;
+  }
+  #ui h1 { margin:0 0 6px 0; font: 600 14px system-ui, sans-serif; }
+  #ui .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  button, .mini {
+    border:1px solid #333; background:#1b1b1b; color:#ddd; border-radius:8px;
+    padding:6px 10px; cursor:pointer;
+  }
+  button:active { transform: translateY(1px); }
+  input[type=range]{ width:180px; }
+  #zoomTxt { font-variant-numeric: tabular-nums; }
+
+  /* D-pad arrows */
+  .pad { display:grid; grid-template-columns:32px 32px 32px; gap:6px; }
+  .pad button { width:32px; height:32px; padding:0; font-weight:700; }
+
+  /* Joystick */
+  #joyWrap {
+    position: fixed; right: 12px; bottom: 12px; z-index: 20;
+    width: 160px; height: 160px; display:flex; align-items:center; justify-content:center;
+    background: var(--panel); border-radius: 14px; backdrop-filter: blur(4px);
+    box-shadow: 0 2px 10px rgba(0,0,0,.35);
+  }
+  #joy {
+    position: relative; width: 120px; height: 120px; border-radius: 50%;
+    background: radial-gradient(ellipse at center, #101010, #0a0a0a);
+    border:1px solid #333; touch-action:none;
+  }
+  #knob {
+    position:absolute; left:50%; top:50%; transform:translate(-50%, -50%);
+    width: 44px; height: 44px; border-radius:50%;
+    background: #222; border:2px solid #666; box-shadow: inset 0 0 6px rgba(255,255,255,.06);
+    pointer-events:none;
+  }
+  #hint { opacity:.8; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- LEFT PANEL -->
+<div id="ui">
+  <h1>Mandelbrot</h1>
+  <div class="row">Zoom: <span id="zoomTxt">1×</span></div>
+  <div class="row">
+    <button id="zin">＋</button>
+    <button id="zout">－</button>
+    <button id="reset">Reset</button>
+  </div>
+  <div class="row">
+    <label>Max iter</label>
+    <input id="iter" type="range" min="50" max="2000" value="500">
+    <span class="mini" id="iterVal">500</span>
+  </div>
+  <div class="row">
+    <label><input id="smooth" type="checkbox" checked> Smooth coloring</label>
+  </div>
+
+  <div class="row" style="margin-top:8px;">Move</div>
+  <div class="pad">
+    <div></div><button id="up">▲</button><div></div>
+    <button id="left">◀</button><div></div><button id="right">▶</button>
+    <div></div><button id="down">▼</button><div></div>
+  </div>
+
+  <div id="hint" class="row">🖱️ Scroll to zoom • Drag to pan • Dbl-click reset • Arrow keys move</div>
+</div>
+
+<!-- RIGHT JOYSTICK -->
+<div id="joyWrap">
+  <div id="joy">
+    <div id="knob"></div>
+  </div>
+</div>
+
+<script>
+/* ================== Canvas + State ================== */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+function fit() {
+  const dpr = Math.max(1, devicePixelRatio || 1);
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+}
+fit();
+
+let centerX = -0.5, centerY = 0;
+let scale = Math.min(canvas.width, canvas.height) / 3.2; // px per complex unit
+let prevCenterX = centerX, prevCenterY = centerY, prevScale = scale;
+
+function updateZoomText(){
+  const base = Math.min(canvas.width, canvas.height) / 3.2;
+  const z = scale / base;
+  document.getElementById('zoomTxt').textContent = (z>=1 ? z.toFixed(2) : z.toPrecision(2)) + '×';
+}
+updateZoomText();
+
+addEventListener('resize', () => { 
+  const oldW = canvas.width, oldH = canvas.height;
+  fit();
+  // keep same center/scale; need full redraw
+  updateZoomText(); 
+  fullRender(true);
+});
+
+/* ================== UI Controls ================== */
+const iterSlider = document.getElementById('iter');
+const iterVal = document.getElementById('iterVal');
+const smoothChk = document.getElementById('smooth');
+let MAX_ITER = +iterSlider.value;
+iterSlider.addEventListener('input', () => { 
+  MAX_ITER = +iterSlider.value; 
+  iterVal.textContent = MAX_ITER; 
+  fullRender(true); 
+});
+smoothChk.addEventListener('change', () => fullRender(false));
+
+const ZOOM_STEP = 1.25;
+const PAN_STEP = () => 80/scale;
+
+document.getElementById('zin').onclick  = () => { zoomAt(canvas.width/2, canvas.height/2, ZOOM_STEP); };
+document.getElementById('zout').onclick = () => { zoomAt(canvas.width/2, canvas.height/2, 1/ZOOM_STEP); };
+document.getElementById('reset').onclick= () => { centerX=-0.5; centerY=0; scale=Math.min(canvas.width, canvas.height)/3.2; updateZoomText(); fullRender(true); };
+
+document.getElementById('up').onclick    = () => { centerY -= PAN_STEP(); smartPanRender(); };
+document.getElementById('down').onclick  = () => { centerY += PAN_STEP(); smartPanRender(); };
+document.getElementById('left').onclick  = () => { centerX -= PAN_STEP(); smartPanRender(); };
+document.getElementById('right').onclick = () => { centerX += PAN_STEP(); smartPanRender(); };
+
+addEventListener('keydown', (e)=>{
+  if (e.key === 'ArrowUp')   { centerY -= PAN_STEP(); smartPanRender(); }
+  if (e.key === 'ArrowDown') { centerY += PAN_STEP(); smartPanRender(); }
+  if (e.key === 'ArrowLeft') { centerX -= PAN_STEP(); smartPanRender(); }
+  if (e.key === 'ArrowRight'){ centerX += PAN_STEP(); smartPanRender(); }
+  if (e.key === '+' || e.key === '=') { zoomAt(canvas.width/2, canvas.height/2, ZOOM_STEP); }
+  if (e.key === '-' || e.key === '_') { zoomAt(canvas.width/2, canvas.height/2, 1/ZOOM_STEP); }
+});
+
+/* Mouse: zoom, pan, dbl-click reset */
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.max(1, devicePixelRatio || 1);
+  const px = (e.clientX - rect.left) * dpr;
+  const py = (e.clientY - rect.top)  * dpr;
+  const z = Math.pow(1.2, -e.deltaY/100);
+  zoomAt(px, py, z);
+}, { passive:false });
+
+let dragging = false, lastX = 0, lastY = 0;
+canvas.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+addEventListener('mouseup', () => dragging = false);
+addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const dpr = Math.max(1, devicePixelRatio || 1);
+  centerX -= (e.clientX - lastX) * dpr / scale;
+  centerY -= (e.clientY - lastY) * dpr / scale;
+  lastX = e.clientX; lastY = e.clientY;
+  smartPanRender();
+});
+canvas.addEventListener('dblclick', () => { centerX=-0.5; centerY=0; scale=Math.min(canvas.width, canvas.height)/3.2; updateZoomText(); fullRender(true); });
+
+function zoomAt(px, py, factor){
+  // Complex coord under pixel BEFORE zoom
+  const re = centerX + (px - canvas.width/2) / scale;
+  const im = centerY + (py - canvas.height/2) / scale;
+  scale *= factor;
+  // Keep that complex coord under the same pixel AFTER zoom
+  centerX = re - (px - canvas.width/2) / scale;
+  centerY = im - (py - canvas.height/2) / scale;
+  updateZoomText();
+  fullRender(true); // re-render full after zoom (progressive)
+}
+
+/* ================== Joystick ================== */
+const joy = document.getElementById('joy');
+const knob = document.getElementById('knob');
+const JOY_R = 60, KNOB_R = 22;
+let joyActive = false, joyVec = {x:0, y:0};
+
+function setKnob(dx, dy){
+  knob.style.left = (50 + (dx / JOY_R) * 50) + '%';
+  knob.style.top  = (50 + (dy / JOY_R) * 50) + '%';
+}
+setKnob(0,0);
+
+function joyStart(clientX, clientY){
+  const rect = joy.getBoundingClientRect();
+  const x = clientX - (rect.left + rect.width/2);
+  const y = clientY - (rect.top + rect.height/2);
+  const len = Math.hypot(x,y) || 1;
+  const clamped = Math.min(len, JOY_R - KNOB_R);
+  joyVec.x = (x/len) * clamped;
+  joyVec.y = (y/len) * clamped;
+  setKnob(joyVec.x, joyVec.y);
+  joyActive = true;
+}
+function joyMove(clientX, clientY){
+  if (!joyActive) return;
+  joyStart(clientX, clientY);
+}
+function joyEnd(){
+  joyActive = false;
+  joyVec.x = 0; joyVec.y = 0;
+  setKnob(0,0);
+}
+joy.addEventListener('pointerdown', e => { joy.setPointerCapture(e.pointerId); joyStart(e.clientX, e.clientY); });
+joy.addEventListener('pointermove',  e => joyMove(e.clientX, e.clientY));
+joy.addEventListener('pointerup',    joyEnd);
+joy.addEventListener('pointercancel',joyEnd);
+joy.addEventListener('pointerleave', joyEnd);
+
+let last = performance.now();
+function tick(now){
+  const dt = Math.min(0.05, (now - last)/1000);
+  last = now;
+  if (joyActive){
+    const base = 300 / scale;
+    const vx = (joyVec.x / (JOY_R - KNOB_R)) * base;
+    const vy = (joyVec.y / (JOY_R - KNOB_R)) * base;
+    centerX += vx * dt;
+    centerY += vy * dt;
+    smartPanRender();
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+/* ================== Worker (tile renderer) ================== */
+const workerSrc = `
+self.onmessage = (e)=>{
+  const {type, payload} = e.data;
+  if (type==='render'){
+    const {w,h,centerX,centerY,scale,maxIter,smooth,x0,y0} = payload;
+    const data = new Uint8ClampedArray(w*h*4);
+
+    const hsvToRgb=(h,s,v)=>{
+      let c=v*s, x=c*(1-Math.abs((h/60)%2-1)), m=v-c, r=0,g=0,b=0;
+      let hh=((h%360)+360)%360;
+      if (hh<60){r=c;g=x;} else if (hh<120){r=x;g=c;}
+      else if (hh<180){g=c;b=x;} else if (hh<240){g=x;b=c;}
+      else if (hh<300){r=x;b=c;} else {r=c;b=x;}
+      return [Math.round((r+m)*255),Math.round((g+m)*255),Math.round((b+m)*255)];
+    };
+
+    let idx=0;
+    const halfW = (x0 + w/2), halfH = (y0 + h/2); // unused but left for clarity
+    for (let yy=0; yy<h; yy++){
+      const yPix = y0 + yy;
+      const cim = centerY + (yPix - self.canvasH/2) / scale;
+      for (let xx=0; xx<w; xx++){
+        const xPix = x0 + xx;
+        const cre = centerX + (xPix - self.canvasW/2) / scale;
+
+        let zr=0, zi=0, i=0;
+        while (zr*zr + zi*zi <= 4 && i < maxIter){
+          const zr2 = zr*zr - zi*zi + cre;
+          const zi2 = 2*zr*zi + cim;
+          zr = zr2; zi = zi2; i++;
+        }
+        let r,g,b;
+        if (i>=maxIter){ r=g=b=0; }
+        else if (!smooth){
+          const hue = 360 * i / maxIter;
+          [r,g,b] = hsvToRgb(hue,1,1);
+        } else {
+          const mag = Math.hypot(zr, zi);
+          const nu = Math.log2(Math.log(mag));
+          const smoothI = i + 1 - nu;
+          const hue = 360 * (0.02 + 0.98 * (smoothI / maxIter));
+          [r,g,b] = hsvToRgb(hue,1,1);
+        }
+        data[idx++] = r; data[idx++] = g; data[idx++] = b; data[idx++] = 255;
+      }
+    }
+    self.postMessage({type:'done', payload:{x0,y0,w,h,buffer:data.buffer}}, [data.buffer]);
+  } else if (type==='setCanvasSize'){
+    self.canvasW = payload.w;
+    self.canvasH = payload.h;
+  }
+};
+`;
+const workerBlob = new Blob([workerSrc], {type:'application/javascript'});
+const worker = new Worker(URL.createObjectURL(workerBlob));
+
+function setWorkerCanvasSize(){
+  worker.postMessage({type:'setCanvasSize', payload:{w:canvas.width, h:canvas.height}});
+}
+setWorkerCanvasSize();
+
+worker.onmessage = (e)=>{
+  const {type, payload} = e.data;
+  if (type==='done'){
+    const {x0,y0,w,h,buffer} = payload;
+    const imgData = new ImageData(new Uint8ClampedArray(buffer), w, h);
+    ctx.putImageData(imgData, x0, y0);
+  }
+};
+
+/* ================== Render Orchestrator ================== */
+const TILE = 128; // tile size for partial renders
+let previewInFlight = false;
+
+function enqueueRegion(x0, y0, w, h, options={}){
+  // clamp
+  x0 = Math.max(0, Math.floor(x0));
+  y0 = Math.max(0, Math.floor(y0));
+  if (x0>=canvas.width || y0>=canvas.height) return;
+  w = Math.min(canvas.width - x0, Math.ceil(w));
+  h = Math.min(canvas.height - y0, Math.ceil(h));
+  if (w<=0 || h<=0) return;
+
+  worker.postMessage({
+    type:'render',
+    payload:{
+      w, h, x0, y0,
+      centerX, centerY, scale,
+      maxIter: MAX_ITER,
+      smooth: smoothChk.checked
+    }
+  });
+}
+
+function fullRender(progressive=true){
+  // cancel notion is implicit: we just render with latest params
+  prevCenterX = centerX; prevCenterY = centerY; prevScale = scale;
+
+  if (progressive){
+    // Quick preview: lower iterations + stride 2 drawing
+    previewInFlight = true;
+    const quickIter = Math.max(60, Math.min(200, Math.floor(MAX_ITER/4)));
+    const stride = 2;
+
+    // Render preview tiles in coarse grid
+    for (let y=0; y<canvas.height; y+=TILE){
+      for (let x=0; x<canvas.width; x+=TILE){
+        renderPreviewTile(x, y, Math.min(TILE, canvas.width-x), Math.min(TILE, canvas.height-y), quickIter, stride);
+      }
+    }
+    // Then refine full quality tiles
+    requestIdleCallback(()=>{
+      previewInFlight = false;
+      for (let y=0; y<canvas.height; y+=TILE){
+        for (let x=0; x<canvas.width; x+=TILE){
+          enqueueRegion(x, y, Math.min(TILE, canvas.width-x), Math.min(TILE, canvas.height-y));
+        }
+      }
+    }, {timeout: 120});
+  } else {
+    // Straight full-quality tiles
+    for (let y=0; y<canvas.height; y+=TILE){
+      for (let x=0; x<canvas.width; x+=TILE){
+        enqueueRegion(x, y, Math.min(TILE, canvas.width-x), Math.min(TILE, canvas.height-y));
+      }
+    }
+  }
+}
+
+function renderPreviewTile(x0, y0, w, h, quickIter, stride){
+  // Smaller one-off worker render with custom params
+  const msg = {
+    w,h,x0,y0,centerX,centerY,scale,maxIter:quickIter,smooth:smoothChk.checked
+  };
+  const previewWorker = new Worker(URL.createObjectURL(new Blob([`
+    ${workerSrc}
+  `], {type:'application/javascript'})));
+  previewWorker.onmessage = (e)=>{
+    if (e.data.type!=='done') return;
+    const {buffer} = e.data.payload;
+    const full = new Uint8ClampedArray(buffer);
+    // Downsample-style draw: plot every 'stride' pixel to the main canvas for speed
+    const id = ctx.createImageData(w, h);
+    id.data.set(full);
+    // Instead of sub-sampling, just draw the whole tile (it's already cheap quickIter)
+    ctx.putImageData(id, x0, y0);
+    previewWorker.terminate();
+  };
+  previewWorker.postMessage({type:'setCanvasSize', payload:{w:canvas.width, h:canvas.height}});
+  previewWorker.postMessage({type:'render', payload:msg});
+}
+
+/* Smart panning: blit + border regions */
+function smartPanRender(){
+  const sameScale = Math.abs(scale - prevScale) < 1e-9;
+  // pixel shift relative to previous drawn state
+  const dx = Math.round((prevCenterX - centerX) * scale);
+  const dy = Math.round((prevCenterY - centerY) * scale);
+
+  if (sameScale && (dx !== 0 || dy !== 0) && Math.abs(dx) < canvas.width && Math.abs(dy) < canvas.height){
+    // Shift existing pixels
+    // Use 'copy' to avoid blending for speed
+    ctx.globalCompositeOperation = 'copy';
+    ctx.drawImage(canvas, dx, dy);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Compute exposed regions (up to 4)
+    if (dx !== 0){
+      const w = Math.abs(dx);
+      const x0 = dx > 0 ? 0 : canvas.width - w;
+      enqueueRegion(x0, 0, w, canvas.height);
+    }
+    if (dy !== 0){
+      const h = Math.abs(dy);
+      const y0 = dy > 0 ? 0 : canvas.height - h;
+      // Vertical band may overlap corners already queued; it’s fine to overdraw a little.
+      enqueueRegion(0, y0, canvas.width, h);
+    }
+
+    // update prev* AFTER using them
+    prevCenterX = centerX; prevCenterY = centerY; prevScale = scale;
+  } else {
+    // Fallback to full progressive render (on zoom or large move)
+    fullRender(true);
+  }
+}
+
+/* ================== First draw ================== */
+fullRender(true);
+
+/* ================== Utils: worker canvas size on resize ================== */
+addEventListener('resize', setWorkerCanvasSize);
+
+</script>
+</body>
+</html>

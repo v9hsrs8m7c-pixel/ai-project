@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Renju / Gomoku — Dual Boards (Single-File)</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#111723;
+    --accent:#6aa9ff;
+    --grid:#3a4657;
+    --grid-bold:#54617a;
+    --black:#111;
+    --white:#f4f5f8;
+    --win:#2fe39a;
+    --forbid:#ff5d7a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:linear-gradient(180deg,#0b0f14, #0b0f14 60%, #0f1624);
+    color:#dde3f3;
+    font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+    display:flex; min-height:100svh; gap:18px; padding:18px;
+  }
+  .shell{
+    display:grid;
+    grid-template-columns: 1fr 320px;
+    gap:18px;
+    width:100%;
+    max-width:1600px;
+    margin:auto;
+    align-items:start;
+  }
+
+  /* --- Two boards area --- */
+  .boards{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:18px;
+    min-width:0;
+  }
+  @media (max-width: 1100px){
+    .shell{ grid-template-columns:1fr; }
+    .boards{ grid-template-columns:1fr; }
+  }
+
+  .board-card{
+    background:radial-gradient(1500px 800px at 10% -10%, #182437, transparent 50%), #0f1624;
+    border:1px solid #1c2738;
+    border-radius:16px;
+    padding:12px;
+    position:relative;
+    box-shadow:0 20px 60px #0006 inset, 0 10px 40px #0006;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+
+    /* user-resizable physical board area */
+    resize: both;
+    overflow: auto;
+    min-width: 360px;
+    min-height: 360px;
+  }
+
+  .board-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  .status{
+    background:#0e1522;
+    border:1px solid #26344e;
+    border-radius:12px;
+    padding:8px 10px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-height:40px;
+    flex:1;
+    min-width:240px;
+  }
+  .status .meta{display:flex; flex-direction:column; gap:2px}
+  .pill{padding:4px 8px; border-radius:999px; border:1px solid #2a3a58; font-size:12px; display:inline-block}
+  .pill.black{background:#111; color:#fff; border-color:#000}
+  .pill.white{background:#f4f5f8; color:#111; border-color:#ddd}
+  .subtle{opacity:.75; font-size:12px}
+
+  .toolbar{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:flex-end;
+  }
+
+  input, select, button{
+    background:#0e1522; color:#dfe7ff; border:1px solid #273145; border-radius:10px; padding:10px 12px; outline:none;
+  }
+  button{
+    background:linear-gradient(180deg,#15223a,#0f192c);
+    cursor:pointer;
+    transition:.15s transform ease, .2s border-color ease, .2s box-shadow ease;
+    padding:10px 12px;
+  }
+  button:hover{transform: translateY(-1px); border-color:#35507a; box-shadow:0 6px 16px #0008}
+  button:active{transform:translateY(0)}
+  .btn-accent{border-color:#4367a7; box-shadow:0 6px 16px #0006}
+
+  .canvas-wrap{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:100%;
+    min-height:320px;
+  }
+  canvas{
+    display:block;
+    background:#f1d69d;
+    border-radius:12px;
+    box-shadow: inset 0 3px 0 #0002, inset 0 -3px 0 #fff2;
+    max-width:100%;
+    height:auto;
+  }
+
+  /* --- Side panel (no move list) --- */
+  .side{
+    background:var(--panel);
+    border:1px solid #1c2738;
+    border-radius:16px;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    box-shadow: 0 12px 30px #0007;
+  }
+  h1{font-size:18px; margin:0 0 6px; letter-spacing:.3px}
+  label{font-size:12px; opacity:.9}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .row > *{flex:1}
+  input[type=number]{width:100%}
+  .coords-toggle{display:flex; gap:8px; align-items:center}
+  .hr{height:1px; background:#1d2a3f; margin:8px 0}
+  .note{color:#b9d6ff}
+  .danger{color:#ff93a6}
+  .success{color:#2fe39a}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="boards">
+      <!-- Board A -->
+      <section class="board-card" id="cardA">
+        <div class="board-top">
+          <div class="status" id="statusA">
+            <div class="meta">
+              <div id="turnTextA">Board A — Turn: <span class="pill black">Black</span></div>
+              <div id="ruleTextA" class="subtle">Rules: Freestyle</div>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button id="undoA" title="Undo (Ctrl/⌘+Z)">↶</button>
+            <button id="redoA" title="Redo (Ctrl/⌘+Y)">↷</button>
+            <button id="restartA" class="btn-accent">⟲ New</button>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="boardA" width="900" height="900" aria-label="Gomoku board A"></canvas>
+        </div>
+      </section>
+
+      <!-- Board B -->
+      <section class="board-card" id="cardB">
+        <div class="board-top">
+          <div class="status" id="statusB">
+            <div class="meta">
+              <div id="turnTextB">Board B — Turn: <span class="pill black">Black</span></div>
+              <div id="ruleTextB" class="subtle">Rules: Freestyle</div>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button id="undoB" title="Undo (Ctrl/⌘+Z)">↶</button>
+            <button id="redoB" title="Redo (Ctrl/⌘+Y)">↷</button>
+            <button id="restartB" class="btn-accent">⟲ New</button>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="boardB" width="900" height="900" aria-label="Gomoku board B"></canvas>
+        </div>
+      </section>
+    </div>
+
+    <aside class="side">
+      <h1>Renju / Gomoku (Dual Boards)</h1>
+
+      <div class="row">
+        <div>
+          <label for="size">Board size (N×N)</label>
+          <input id="size" type="number" min="9" max="25" step="1" value="15" />
+        </div>
+        <div>
+          <label for="winLen">Win length</label>
+          <input id="winLen" type="number" min="5" max="10" step="1" value="5" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="rules">Rule set</label>
+          <select id="rules">
+            <option value="freestyle" selected>Freestyle (≥5 wins)</option>
+            <option value="simple-renju">Simple Renju (open-3/4 forbids for Black)</option>
+            <option value="strict-renju">Strict Renju (exact-5 Black + forbids)</option>
+          </select>
+        </div>
+        <div class="coords-toggle">
+          <input type="checkbox" id="showCoords" checked />
+          <label for="showCoords">Show coordinates & star points</label>
+        </div>
+      </div>
+
+      <button id="applyBtn" class="btn-accent">Apply Settings (resets both)</button>
+
+      <div class="hr"></div>
+
+      <div class="subtle">
+        <span class="note">Tips:</span> Each board is independent. Drag the bottom-right corner of a board to resize it.
+        Keyboard: <b>Ctrl/⌘+Z</b> undo, <b>Ctrl/⌘+Y</b> redo (applies to the last-clicked board).
+      </div>
+    </aside>
+  </div>
+
+<script>
+(()=>{
+  // --- Shared helpers ---
+  const EMPTY=0, BLACK=1, WHITE=2;
+  function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
+  function deepBoard(n){ return Array.from({length:n},()=>Array(n).fill(EMPTY)); }
+  function idxToCoord(i){ return String.fromCharCode('A'.charCodeAt(0)+i + (i>=8?1:0)); } // skip 'I'
+  function starPointsFor(n){
+    if(n===9)  return [[2,2],[2,6],[6,2],[6,6],[4,4]];
+    if(n===13) return [[3,3],[3,9],[9,3],[9,9],[6,6]];
+    if(n===15) return [[3,3],[3,11],[11,3],[11,11],[7,7]];
+    if(n===19) return [[3,3],[3,9],[3,15],[9,3],[9,9],[9,15],[15,3],[15,9],[15,15]];
+    return [];
+  }
+
+  // --- Settings UI (shared) ---
+  const uiSettings = {
+    size: document.getElementById('size'),
+    winLen: document.getElementById('winLen'),
+    rules: document.getElementById('rules'),
+    showCoords: document.getElementById('showCoords'),
+    applyBtn: document.getElementById('applyBtn'),
+  };
+
+  // --- Game factory (one per canvas) ---
+  class Game {
+    constructor(opts){
+      this.canvas = opts.canvas;
+      this.ctx = this.canvas.getContext('2d');
+
+      this.turnText = opts.turnText;
+      this.ruleText = opts.ruleText;
+      this.statusEl = opts.statusEl;
+
+      this.undoBtn = opts.undoBtn;
+      this.redoBtn = opts.redoBtn;
+      this.restartBtn = opts.restartBtn;
+
+      this.name = opts.name;
+
+      this.N = opts.N;
+      this.WIN_LEN = opts.WIN_LEN;
+      this.RULES = opts.RULES;
+      this.SHOW_COORDS = opts.SHOW_COORDS;
+
+      this.gridPx = 0;
+      this.cell = 0;
+      this.pad = 36;
+
+      this.board = deepBoard(this.N);
+      this.turn = BLACK;
+      this.history = [];
+      this.redoStack = [];
+      this.winner = null;
+      this.lastMove = null;
+
+      this._bind();
+      this.resetGame();
+      this.layout();
+    }
+
+    setConfig({N, WIN_LEN, RULES, SHOW_COORDS}){
+      this.N = N; this.WIN_LEN = WIN_LEN; this.RULES = RULES; this.SHOW_COORDS = SHOW_COORDS;
+      this.resetGame();
+      this.layout();
+      this.flashStatus('Settings applied.');
+    }
+
+    _bind(){
+      this.canvas.addEventListener('click', (e)=>{
+        lastActive = this;
+        if(this.winner) return;
+
+        const {x,y} = this.eventToCell(e);
+        if(x<0||y<0||x>=this.N||y>=this.N) return;
+        if(this.board[y][x]!==EMPTY) return;
+
+        const color = this.turn;
+        if(this.isForbidden(x,y,color)){
+          this.flashStatus("Forbidden move (Renju)", true);
+          return;
+        }
+
+        this.placeMove(x,y,color);
+
+        const res = this.checkWinAt(x,y,color);
+        if(res.won){
+          this.winner = {color, line: res.line};
+          this.updateStatus();
+          this.draw();
+          this.flashStatus((color===BLACK?'Black':'White')+' wins!', false, true);
+          return;
+        }
+
+        this.turn = 3 - this.turn;
+        this.updateStatus();
+        this.draw();
+      });
+
+      this.undoBtn.addEventListener('click', ()=>{ lastActive = this; this.undo(); });
+      this.redoBtn.addEventListener('click', ()=>{ lastActive = this; this.redo(); });
+      this.restartBtn.addEventListener('click', ()=>{
+        lastActive = this;
+        this.resetGame();
+        this.flashStatus('New game started.');
+      });
+
+      // Resize observer for resizable card
+      const ro = new ResizeObserver(()=>this.layout());
+      ro.observe(this.canvas.parentElement); // .canvas-wrap
+      ro.observe(this.canvas.closest('.board-card')); // the resizable card
+      this._ro = ro;
+
+      window.addEventListener('resize', ()=>this.layout());
+    }
+
+    resetGame(){
+      this.board = deepBoard(this.N);
+      this.turn = BLACK;
+      this.history = [];
+      this.redoStack = [];
+      this.winner = null;
+      this.lastMove = null;
+      this.updateStatus();
+      this.draw();
+    }
+
+    layout(){
+      // Responsive square canvas; keep crisp on HiDPI
+      const dpr = window.devicePixelRatio || 1;
+
+      // Use available card space
+      const card = this.canvas.closest('.board-card');
+      const top = card.querySelector('.board-top');
+      const wrap = this.canvas.parentElement; // .canvas-wrap
+
+      // Compute a reasonable square side within the card content box
+      const cardStyles = getComputedStyle(card);
+      const padX = parseFloat(cardStyles.paddingLeft) + parseFloat(cardStyles.paddingRight);
+      const padY = parseFloat(cardStyles.paddingTop) + parseFloat(cardStyles.paddingBottom);
+
+      const usableW = Math.max(260, card.clientWidth - padX);
+      const usableH = Math.max(260, card.clientHeight - padY - top.offsetHeight - 10);
+
+      const target = clamp(Math.floor(Math.min(usableW, usableH)), 320, 1400);
+
+      this.canvas.style.width = this.canvas.style.height = target + 'px';
+      this.canvas.width  = Math.floor(target * dpr);
+      this.canvas.height = Math.floor(target * dpr);
+
+      this.ctx.setTransform(dpr,0,0,dpr,0,0);
+
+      this.pad = 36; // outer board padding
+      this.gridPx = target - this.pad*2;
+      this.cell = this.gridPx / (this.N-1);
+
+      this.draw();
+    }
+
+    // --- Drawing ---
+    drawGrid(){
+      const ctx = this.ctx;
+
+      ctx.save();
+      ctx.fillStyle = '#f1d69d';
+      ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(this.pad, this.pad);
+      ctx.lineWidth = 1.25;
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+
+      for(let i=0;i<this.N;i++){
+        const p = i*this.cell;
+        ctx.beginPath(); ctx.moveTo(0,p); ctx.lineTo(this.gridPx,p); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(p,0); ctx.lineTo(p,this.gridPx); ctx.stroke();
+      }
+
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid-bold');
+      ctx.strokeRect(0,0,this.gridPx,this.gridPx);
+
+      if(this.SHOW_COORDS){
+        // star points (inside grid)
+        const stars = starPointsFor(this.N);
+        ctx.fillStyle = '#333';
+        stars.forEach(([r,c])=>{
+          const x = c*this.cell, y = r*this.cell;
+          ctx.beginPath(); ctx.arc(x,y,3.1,0,Math.PI*2); ctx.fill();
+        });
+
+        // Coordinates: outside grid, inside board padding
+        ctx.fillStyle = '#333';
+        ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline='middle';
+
+        for(let i=0;i<this.N;i++){
+          const x = i*this.cell;
+          const col = idxToCoord(i);
+          ctx.fillText(col, x, -18);
+          ctx.fillText(col, x, this.gridPx + 18);
+        }
+        for(let j=0;j<this.N;j++){
+          const y = j*this.cell;
+          const row = (this.N - j);
+          ctx.fillText(String(row), -18, y);
+          ctx.fillText(String(row), this.gridPx + 18, y);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    drawStone(x,y,color,isLast){
+      const ctx = this.ctx;
+      const r = Math.max(8, this.cell*0.42);
+      ctx.save();
+
+      const grd = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.1, x, y, r*1.1);
+      if(color===BLACK){
+        grd.addColorStop(0, '#222');
+        grd.addColorStop(1, '#000');
+      } else {
+        grd.addColorStop(0, '#fff');
+        grd.addColorStop(1, '#e6e6e6');
+      }
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+      ctx.fillStyle = grd; ctx.fill();
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.2; ctx.stroke();
+
+      if(isLast){
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = color===BLACK ? '#7ab6ff' : '#ffda7a';
+        ctx.beginPath(); ctx.arc(x,y,r*0.55,0,Math.PI*2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    drawStones(){
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.translate(this.pad, this.pad);
+      for(let y=0;y<this.N;y++){
+        for(let x=0;x<this.N;x++){
+          const v = this.board[y][x];
+          if(v===EMPTY) continue;
+          const cx = x*this.cell, cy = y*this.cell;
+          this.drawStone(cx,cy,v,(this.lastMove && this.lastMove.x===x && this.lastMove.y===y));
+        }
+      }
+      ctx.restore();
+    }
+
+    drawWinLine(win){
+      if(!win) return;
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.translate(this.pad, this.pad);
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--win');
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      const sx = win.start.x*this.cell, sy = win.start.y*this.cell;
+      const ex = win.end.x*this.cell, ey = win.end.y*this.cell;
+      ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+      ctx.restore();
+    }
+
+    draw(){
+      this.drawGrid();
+      this.drawStones();
+      this.drawWinLine(this.winner && this.winner.line);
+    }
+
+    // --- Interaction helpers ---
+    eventToCell(e){
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left);
+      const my = (e.clientY - rect.top);
+      const gx = (mx - this.pad) / this.cell;
+      const gy = (my - this.pad) / this.cell;
+
+      const nx = Math.round(gx);
+      const ny = Math.round(gy);
+
+      const px = this.pad + nx*this.cell;
+      const py = this.pad + ny*this.cell;
+      const dist = Math.hypot(px - mx, py - my);
+
+      if(dist > Math.max(14, this.cell*0.45)) return {x:-1,y:-1};
+      return {x:nx, y:ny};
+    }
+
+    placeMove(x,y,color){
+      this.board[y][x] = color;
+      this.history.push({x,y,color});
+      this.redoStack.length = 0;
+      this.lastMove = {x,y};
+    }
+
+    undo(){
+      if(this.history.length===0) return;
+      const move = this.history.pop();
+      this.board[move.y][move.x] = EMPTY;
+      this.redoStack.push(move);
+      this.winner = null;
+      this.lastMove = this.history.length
+        ? {x:this.history[this.history.length-1].x, y:this.history[this.history.length-1].y}
+        : null;
+      this.turn = move.color;
+      this.updateStatus();
+      this.draw();
+    }
+
+    redo(){
+      if(this.redoStack.length===0) return;
+      const move = this.redoStack.pop();
+      if(this.isForbidden(move.x, move.y, move.color)){
+        this.flashStatus("Redo resulted in forbidden move; canceled.", true);
+        return;
+      }
+      this.board[move.y][move.x] = move.color;
+      this.history.push(move);
+      this.lastMove = {x:move.x,y:move.y};
+      this.turn = 3 - move.color;
+
+      const res = this.checkWinAt(move.x, move.y, move.color);
+      if(res.won){ this.winner = {color:move.color, line:res.line}; }
+      this.updateStatus();
+      this.draw();
+    }
+
+    // --- Win / Rule logic ---
+    countDir(x,y,dx,dy,color){
+      let c=0;
+      for(let i=1;i<this.WIN_LEN+6;i++){
+        const nx=x+dx*i, ny=y+dy*i;
+        if(nx<0||ny<0||nx>=this.N||ny>=this.N) break;
+        if(this.board[ny][nx]===color) c++; else break;
+      }
+      return c;
+    }
+
+    winLine(x,y,dx,dy,color){
+      let sx=x, sy=y;
+      while(true){
+        const nx=sx-dx, ny=sy-dy;
+        if(nx<0||ny<0||nx>=this.N||ny>=this.N) break;
+        if(this.board[ny][nx]===color){ sx=nx; sy=ny; } else break;
+      }
+      let ex=x, ey=y;
+      while(true){
+        const nx=ex+dx, ny=ey+dy;
+        if(nx<0||ny<0||nx>=this.N||ny>=this.N) break;
+        if(this.board[ny][nx]===color){ ex=nx; ey=ny; } else break;
+      }
+      return {start:{x:sx,y:sy}, end:{x:ex,y:ey}};
+    }
+
+    checkWinAt(x,y,color){
+      const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+      for(const [dx,dy] of dirs){
+        const a = 1 + this.countDir(x,y,dx,dy,color) + this.countDir(x,y,-dx,-dy,color);
+        if(this.RULES==='strict-renju' && color===BLACK){
+          if(a===this.WIN_LEN){
+            return {won:true, line:this.winLine(x,y,dx,dy,color)};
+          }
+        } else {
+          if(a>=this.WIN_LEN){
+            return {won:true, line:this.winLine(x,y,dx,dy,color)};
+          }
+        }
+      }
+      return {won:false};
+    }
+
+    valAt(x,y){
+      if(x<0||y<0||x>=this.N||y>=this.N) return 2; // treat off-board as opponent (block)
+      return this.board[y][x];
+    }
+
+    countDirPlaced(x,y,dx,dy,color){
+      let c=0;
+      for(let i=1;i<this.WIN_LEN+6;i++){
+        const nx=x+dx*i, ny=y+dy*i;
+        if(nx<0||ny<0||nx>=this.N||ny>=this.N) break;
+        const v = (nx===x && ny===y) ? color : this.board[ny][nx];
+        if(v===color) c++; else break;
+      }
+      return c;
+    }
+
+    overlineIfPlaced(x,y,color){
+      const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+      for(const [dx,dy] of dirs){
+        const a = 1 + this.countDirPlaced(x,y,dx,dy,color) + this.countDirPlaced(x,y,-dx,-dy,color);
+        if(a>this.WIN_LEN) return true;
+      }
+      return false;
+    }
+
+    lineString(x,y,dx,dy,color){
+      const window = [];
+      for(let i=8;i>=1;i--){
+        const nx=x-dx*i, ny=y-dy*i;
+        window.push(this.valAt(nx,ny));
+      }
+      window.push(color);
+      for(let i=1;i<=8;i++){
+        const nx=x+dx*i, ny=y+dy*i;
+        window.push(this.valAt(nx,ny));
+      }
+      return window.map(v=>String(v)).join('');
+    }
+
+    countPatterns(s, patterns){
+      let total=0;
+      for(const p of patterns){
+        let idx = s.indexOf(p);
+        while(idx!==-1){
+          total++;
+          idx = s.indexOf(p, idx+1);
+        }
+      }
+      return Math.min(total,1);
+    }
+
+    analyzePatternsIfPlaced(x,y,color){
+      let openThrees=0, openFours=0;
+      const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+      for(const [dx,dy] of dirs){
+        const s = this.lineString(x,y,dx,dy,color);
+        openFours  += this.countPatterns(s, ['011110']);
+        openThrees += this.countPatterns(s, ['01110','010110','011010']);
+      }
+      openThrees = Math.min(openThrees, 4);
+      openFours  = Math.min(openFours, 4);
+      return {openThrees, openFours};
+    }
+
+    isForbidden(x,y,color){
+      if(this.RULES==='freestyle') return false;
+      if(color===WHITE) return false;
+
+      if(this.overlineIfPlaced(x,y,color)) return true;
+
+      const {openThrees, openFours} = this.analyzePatternsIfPlaced(x,y,color);
+      if(openThrees>=2) return true;
+      if(openFours>=2) return true;
+
+      return false;
+    }
+
+    // --- Status UI ---
+    updateStatus(){
+      const t = this.winner
+        ? (this.winner.color===BLACK?'Black wins':'White wins')
+        : (this.turn===BLACK?'Black':'White');
+
+      this.turnText.innerHTML =
+        `${this.name} — Turn: ` +
+        (this.winner
+          ? `<span class="pill ${this.winner.color===BLACK?'black':'white'}">${t}</span>`
+          : `<span class="pill ${this.turn===BLACK?'black':'white'}">${t}</span>`);
+
+      const ruleDesc = {
+        'freestyle':'Freestyle',
+        'simple-renju':'Simple Renju',
+        'strict-renju':'Strict Renju'
+      }[this.RULES];
+
+      this.ruleText.textContent = `Rules: ${ruleDesc}`;
+    }
+
+    flashStatus(msg, danger=false, success=false){
+      const oldTurn = this.turnText.innerHTML;
+      const oldRule = this.ruleText.textContent;
+
+      const cls = danger ? 'danger' : success ? 'success' : 'note';
+      this.turnText.innerHTML = `${this.name} — ${msg}`;
+      this.ruleText.innerHTML = `<span class="${cls}">${danger?'Rule conflict':success?'Result':'Info'}</span>`;
+
+      setTimeout(()=>{
+        this.turnText.innerHTML = oldTurn;
+        this.ruleText.textContent = oldRule;
+      }, 1400);
+    }
+  }
+
+  // --- Create two games ---
+  function readSharedConfig(){
+    return {
+      N: clamp(parseInt(uiSettings.size.value,10), 9, 25),
+      WIN_LEN: clamp(parseInt(uiSettings.winLen.value,10), 5, 10),
+      RULES: uiSettings.rules.value,
+      SHOW_COORDS: uiSettings.showCoords.checked
+    };
+  }
+
+  const cfg0 = readSharedConfig();
+
+  const gameA = new Game({
+    name: 'Board A',
+    canvas: document.getElementById('boardA'),
+    turnText: document.getElementById('turnTextA'),
+    ruleText: document.getElementById('ruleTextA'),
+    statusEl: document.getElementById('statusA'),
+    undoBtn: document.getElementById('undoA'),
+    redoBtn: document.getElementById('redoA'),
+    restartBtn: document.getElementById('restartA'),
+    ...cfg0
+  });
+
+  const gameB = new Game({
+    name: 'Board B',
+    canvas: document.getElementById('boardB'),
+    turnText: document.getElementById('turnTextB'),
+    ruleText: document.getElementById('ruleTextB'),
+    statusEl: document.getElementById('statusB'),
+    undoBtn: document.getElementById('undoB'),
+    redoBtn: document.getElementById('redoB'),
+    restartBtn: document.getElementById('restartB'),
+    ...cfg0
+  });
+
+  // Keyboard shortcuts apply to the last-clicked board (default A)
+  let lastActive = gameA;
+  window.addEventListener('keydown', (e)=>{
+    const mod = e.ctrlKey || e.metaKey;
+    if(mod && e.key.toLowerCase()==='z'){ e.preventDefault(); lastActive.undo(); }
+    if(mod && e.key.toLowerCase()==='y'){ e.preventDefault(); lastActive.redo(); }
+  });
+
+  // Apply shared settings to BOTH boards
+  uiSettings.applyBtn.addEventListener('click', ()=>{
+    const cfg = readSharedConfig();
+    gameA.setConfig(cfg);
+    gameB.setConfig(cfg);
+  });
+
+})();
+</script>
+</body>
+</html>

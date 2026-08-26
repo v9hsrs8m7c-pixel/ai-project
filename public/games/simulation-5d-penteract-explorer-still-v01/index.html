@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>5D Penteract Explorer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+      font-family: sans-serif;
+      color: white;
+    }
+    canvas {
+      display: block;
+    }
+    #info, #controls {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px;
+      border-radius: 8px;
+    }
+    #info {
+      top: 10px;
+      left: 10px;
+    }
+    #controls {
+      bottom: 10px;
+      left: 10px;
+    }
+    .key {
+      background: #333;
+      padding: 2px 6px;
+      margin: 2px;
+      border-radius: 3px;
+      font-family: monospace;
+      display: inline-block;
+    }
+    h1 {
+      color: #4fc3f7;
+      margin: 0 0 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h1>5D Penteract Explorer</h1>
+    <p>WASD + Space/Shift to move, mouse to look. Rotate in 5D using keys below.</p>
+    <p id="rotation-info">Rotation: Loading...</p>
+  </div>
+  <div id="controls">
+    <h1>5D Rotation</h1>
+    <div>
+      XY: <span class="key">1</span> <span class="key">2</span>
+      XZ: <span class="key">3</span> <span class="key">4</span>
+      XW: <span class="key">5</span> <span class="key">6</span>
+      XV: <span class="key">7</span> <span class="key">8</span><br>
+      YZ: <span class="key">Q</span> <span class="key">W</span>
+      YW: <span class="key">E</span> <span class="key">R</span>
+      YV: <span class="key">T</span> <span class="key">Y</span><br>
+      ZW: <span class="key">U</span> <span class="key">I</span>
+      ZV: <span class="key">O</span> <span class="key">P</span>
+      WV: <span class="key">[</span> <span class="key">]</span><br>
+      Reset: <span class="key">R</span>
+    </div>
+  </div>
+
+  <script>
+    let scene, camera, renderer, controls;
+    let tesseractLines = [];
+    let keys = {};
+    let movementSpeed = 0.2;
+    let rotationSpeed = 0.02;
+
+    const rotation5D = {
+      xy: 0, xz: 0, xw: 0, xv: 0,
+      yz: 0, yw: 0, yv: 0,
+      zw: 0, zv: 0,
+      wv: 0
+    };
+
+    window.addEventListener('load', init);
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111122);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 5);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+
+      addStars();
+      createPenteract();
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      window.addEventListener('keydown', e => keys[e.key] = true);
+      window.addEventListener('keyup', e => keys[e.key] = false);
+
+      animate();
+    }
+
+    function addStars() {
+      const starsGeom = new THREE.BufferGeometry();
+      const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.8 });
+      const verts = [];
+      for (let i = 0; i < 1000; i++) {
+        verts.push((Math.random() - 0.5) * 1000, (Math.random() - 0.5) * 1000, (Math.random() - 0.5) * 1000);
+      }
+      starsGeom.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      scene.add(new THREE.Points(starsGeom, starMat));
+    }
+
+    function createPenteract() {
+      const verts5D = [];
+      for (let i = 0; i < 32; i++) {
+        verts5D.push([
+          (i & 1) ? 1 : -1,
+          (i & 2) ? 1 : -1,
+          (i & 4) ? 1 : -1,
+          (i & 8) ? 1 : -1,
+          (i & 16) ? 1 : -1
+        ]);
+      }
+
+      const edges = [];
+      for (let i = 0; i < 32; i++) {
+        for (let j = i + 1; j < 32; j++) {
+          let diff = 0;
+          for (let k = 0; k < 5; k++) if (verts5D[i][k] !== verts5D[j][k]) diff++;
+          if (diff === 1) edges.push([i, j]);
+        }
+      }
+
+      const mat = new THREE.LineBasicMaterial({ color: 0x4fc3f7 });
+      const proj = project5Dto3D(verts5D);
+
+      edges.forEach(edge => {
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute([
+          ...proj[edge[0]],
+          ...proj[edge[1]]
+        ], 3));
+        const line = new THREE.Line(geom, mat);
+        scene.add(line);
+        tesseractLines.push(line);
+      });
+    }
+
+    function project5Dto3D(v5d) {
+      const v3d = [];
+      v5d.forEach(v => {
+        let [x, y, z, w, v_] = v;
+        let c, s;
+
+        c = Math.cos(rotation5D.xy); s = Math.sin(rotation5D.xy); [x, y] = [x * c - y * s, x * s + y * c];
+        c = Math.cos(rotation5D.xz); s = Math.sin(rotation5D.xz); [x, z] = [x * c - z * s, x * s + z * c];
+        c = Math.cos(rotation5D.xw); s = Math.sin(rotation5D.xw); [x, w] = [x * c - w * s, x * s + w * c];
+        c = Math.cos(rotation5D.xv); s = Math.sin(rotation5D.xv); [x, v_] = [x * c - v_ * s, x * s + v_ * c];
+        c = Math.cos(rotation5D.yz); s = Math.sin(rotation5D.yz); [y, z] = [y * c - z * s, y * s + z * c];
+        c = Math.cos(rotation5D.yw); s = Math.sin(rotation5D.yw); [y, w] = [y * c - w * s, y * s + w * c];
+        c = Math.cos(rotation5D.yv); s = Math.sin(rotation5D.yv); [y, v_] = [y * c - v_ * s, y * s + v_ * c];
+        c = Math.cos(rotation5D.zw); s = Math.sin(rotation5D.zw); [z, w] = [z * c - w * s, z * s + w * c];
+        c = Math.cos(rotation5D.zv); s = Math.sin(rotation5D.zv); [z, v_] = [z * c - v_ * s, z * s + v_ * c];
+        c = Math.cos(rotation5D.wv); s = Math.sin(rotation5D.wv); [w, v_] = [w * c - v_ * s, w * s + v_ * c];
+
+        const dist1 = 6, scale1 = dist1 / (dist1 + v_);
+        const dist2 = 5, scale2 = dist2 / (dist2 + w);
+        v3d.push([x * scale1 * scale2, y * scale1 * scale2, z * scale1 * scale2]);
+      });
+      return v3d;
+    }
+
+    function updatePenteract() {
+      const k = keys;
+
+      // 10 rotation planes
+      if (k['1']) rotation5D.xy += rotationSpeed;
+      if (k['2']) rotation5D.xy -= rotationSpeed;
+      if (k['3']) rotation5D.xz += rotationSpeed;
+      if (k['4']) rotation5D.xz -= rotationSpeed;
+      if (k['5']) rotation5D.xw += rotationSpeed;
+      if (k['6']) rotation5D.xw -= rotationSpeed;
+      if (k['7']) rotation5D.xv += rotationSpeed;
+      if (k['8']) rotation5D.xv -= rotationSpeed;
+      if (k['q']) rotation5D.yz += rotationSpeed;
+      if (k['w']) rotation5D.yz -= rotationSpeed;
+      if (k['e']) rotation5D.yw += rotationSpeed;
+      if (k['r']) rotation5D.yw -= rotationSpeed;
+      if (k['t']) rotation5D.yv += rotationSpeed;
+      if (k['y']) rotation5D.yv -= rotationSpeed;
+      if (k['u']) rotation5D.zw += rotationSpeed;
+      if (k['i']) rotation5D.zw -= rotationSpeed;
+      if (k['o']) rotation5D.zv += rotationSpeed;
+      if (k['p']) rotation5D.zv -= rotationSpeed;
+      if (k['[']) rotation5D.wv += rotationSpeed;
+      if (k[']']) rotation5D.wv -= rotationSpeed;
+
+      if (k['R']) for (let key in rotation5D) rotation5D[key] = 0;
+
+      document.getElementById('rotation-info').textContent =
+        Object.entries(rotation5D)
+              .map(([k, v]) => `${k.toUpperCase()}: ${v.toFixed(2)}`)
+              .join(', ');
+
+      // Update vertices
+      const verts5D = [];
+      for (let i = 0; i < 32; i++) {
+        verts5D.push([
+          (i & 1) ? 1 : -1,
+          (i & 2) ? 1 : -1,
+          (i & 4) ? 1 : -1,
+          (i & 8) ? 1 : -1,
+          (i & 16) ? 1 : -1
+        ]);
+      }
+      const proj = project5Dto3D(verts5D);
+
+      let idx = 0;
+      for (let i = 0; i < 32; i++) {
+        for (let j = i + 1; j < 32; j++) {
+          let diff = 0;
+          for (let k = 0; k < 5; k++) if (verts5D[i][k] !== verts5D[j][k]) diff++;
+          if (diff === 1) {
+            const line = tesseractLines[idx++];
+            const pos = [...proj[i], ...proj[j]];
+            line.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          }
+        }
+      }
+    }
+
+    function handleMovement() {
+      const dir = new THREE.Vector3();
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+
+      if (keys['w']) dir.add(forward);
+      if (keys['s']) dir.sub(forward);
+      if (keys['a']) dir.sub(right);
+      if (keys['d']) dir.add(right);
+      if (keys[' ']) dir.y += 1;
+      if (keys['Shift']) dir.y -= 1;
+
+      if (dir.length() > 0) {
+        dir.normalize();
+        camera.position.addScaledVector(dir, movementSpeed);
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      updatePenteract();
+      handleMovement();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>

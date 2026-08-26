@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Online Viewer</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            height: 100vh;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .toolbar {
+            background: #2c3e50;
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        }
+        
+        .toolbar h1 {
+            margin: 0;
+            font-size: 1.4rem;
+            flex-grow: 1;
+        }
+        
+        .toolbar button {
+            background: #3498db;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        
+        .toolbar button:hover {
+            background: #2980b9;
+        }
+        
+        .main-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        
+        .editor-panel, .preview-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .editor-panel {
+            border-right: 2px solid #ddd;
+        }
+        
+        .panel-header {
+            background: #34495e;
+            color: white;
+            padding: 10px 15px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        .panel-header button {
+            background: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        #editor {
+            flex: 1;
+            font-family: 'Courier New', Consolas, monospace;
+            font-size: 14px;
+            padding: 15px;
+            border: none;
+            resize: none;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            overflow: auto;
+            outline: none;
+        }
+        
+        #preview {
+            flex: 1;
+            border: none;
+            background: white;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <h1><i class="fas fa-code"></i> HTML Online Viewer</h1>
+        <button onclick="formatCode()">
+            <i class="fas fa-magic"></i> Format
+        </button>
+        <button onclick="openPreviewTab()">
+            <i class="fas fa-external-link-alt"></i> Preview in New Tab
+        </button>
+        <button onclick="openCodeTab()">
+            <i class="fas fa-search"></i> View Code in New Tab
+        </button>
+        <button onclick="clearAll()">
+            <i class="fas fa-trash"></i> Clear
+        </button>
+    </div>
+    
+    <div class="main-container">
+        <div class="editor-panel">
+            <div class="panel-header">
+                <span>HTML Editor</span>
+            </div>
+            <textarea id="editor" spellcheck="false"><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Page</title>
+<style>
+body {
+font-family: Arial, sans-serif;
+max-width: 800px;
+margin: 50px auto;
+padding: 20px;
+background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+color: white;
+}
+h1 {
+text-align: center;
+font-size: 2.5rem;
+margin-bottom: 20px;
+}
+.card {
+background: rgba(255, 255, 255, 0.1);
+backdrop-filter: blur(10px);
+padding: 30px;
+border-radius: 15px;
+box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+button {
+background: white;
+color: #667eea;
+border: none;
+padding: 10px 20px;
+border-radius: 5px;
+cursor: pointer;
+font-size: 16px;
+margin-top: 15px;
+}
+button:hover {
+background: #f0f0f0;
+}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Welcome to HTML Online Viewer! 🚀</h1>
+<p>This is a live HTML editor. Edit the code on the left and see the results instantly on the right.</p>
+<p>Try adding your own HTML, CSS, and JavaScript!</p>
+<button onclick="alert('Hello from the preview!')">Click Me!</button>
+</div>
+</body>
+</html></textarea>
+        </div>
+        
+        <div class="preview-panel">
+            <div class="panel-header">
+                <span>Live Preview</span>
+                <button onclick="refreshPreview()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            <iframe id="preview" sandbox="allow-scripts allow-same-origin allow-forms allow-modals"></iframe>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.7/beautify-html.min.js"></script>
+    <script>
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        
+        function updatePreview() {
+            const code = editor.value;
+            const blob = new Blob([code], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            preview.src = url;
+        }
+        
+        editor.addEventListener('input', updatePreview);
+        
+        function formatCode() {
+            try {
+                const formatted = html_beautify(editor.value, {
+                    indent_size: 2,
+                    indent_char: ' ',
+                    max_preserve_newlines: 2,
+                    preserve_newlines: true,
+                    indent_inner_html: true,
+                    wrap_line_length: 0
+                });
+                editor.value = formatted;
+                updatePreview();
+            } catch (e) {
+                alert('Error formatting: ' + e.message);
+            }
+        }
+        
+        function openPreviewTab() {
+            const newWin = window.open();
+            newWin.document.write(editor.value);
+            newWin.document.close();
+        }
+        
+        function openCodeTab() {
+            const escaped = editor.value
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
+            const html = `<!DOCTYPE html>
+<html>
+<head>
+<title>HTML Code View</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"><\/script>
+<style>
+body { margin: 0; padding: 20px; background: #282c34; }
+pre { margin: 0; }
+code { display: block; }
+</style>
+</head>
+<body>
+<pre><code class="language-html">${escaped}</code></pre>
+<script>hljs.highlightAll();<\/script>
+</body>
+</html>`;
+            
+            const newWin = window.open();
+            newWin.document.write(html);
+            newWin.document.close();
+        }
+        
+        function clearAll() {
+            if (confirm('Clear all code?')) {
+                editor.value = '';
+                updatePreview();
+            }
+        }
+        
+        function refreshPreview() {
+            updatePreview();
+        }
+        
+        editor.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 2;
+            }
+        });
+        
+        updatePreview();
+    </script>
+</body>
+</html>

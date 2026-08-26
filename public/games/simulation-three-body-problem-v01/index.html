@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>로렌츠 어트랙터 – Mobile</title>
+<style>
+  :root {
+    --bg:#050713; --fg:#e8eefc; --muted:#9fb3ff; --glass:rgba(255,255,255,.06); --stroke:rgba(255,255,255,.14);
+  }
+  html,body {
+    height:100%; margin:0; background:var(--bg); color:var(--fg);
+    font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;
+  }
+  #ui {
+    position:fixed; left:12px; right:12px; top:12px; z-index:10;
+    display:flex; gap:8px; align-items:center;
+    padding:10px; border-radius:14px;
+    border:1px solid var(--stroke); background:var(--glass);
+    backdrop-filter: blur(8px);
+  }
+  .pill {
+    appearance:none; border:1px solid var(--stroke);
+    background:var(--glass); color:var(--fg);
+    border-radius:999px; padding:8px 12px; font-weight:700; cursor:pointer;
+  }
+  .s { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+  input[type=range]{width:110px;}
+  #cv { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #hint {
+    position:fixed; left:12px; right:12px; bottom:12px; z-index:10;
+    text-align:center; font-size:12px; color:var(--muted);
+    padding:8px 12px; border-radius:999px;
+    border:1px solid var(--stroke); background:var(--glass);
+    backdrop-filter:blur(8px);
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="ui">
+  <button id="play" class="pill">⏸</button>
+  <button id="reset" class="pill">↺</button>
+  <div class="s">속도 <input id="speed" type="range" min="1" max="10" value="5"></div>
+  <div class="s">흐림 <input id="fade" type="range" min="0" max="20" value="6"></div>
+  <div class="s">σ <input id="sigma" type="range" min="5" max="20" value="10"></div>
+  <div class="s">ρ <input id="rho" type="range" min="20" max="35" value="28"></div>
+  <div class="s">β <input id="beta" type="range" min="2" max="3.5" step="0.1" value="2.6667"></div>
+</div>
+<div id="hint">한 번 탭: 일시정지/재생 • 드래그: 회전 • 두 손가락 핀치: 확대/축소</div>
+
+<script>
+(function(){
+  const cvs = document.getElementById('cv');
+  const ctx = cvs.getContext('2d');
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  let W=0, H=0;
+
+  function resize(){
+    W = Math.floor(innerWidth * DPR);
+    H = Math.floor(innerHeight * DPR);
+    cvs.width = W; cvs.height = H;
+    ctx.setTransform(1,0,0,1,0,0);
+  }
+  addEventListener('resize', resize, {passive:true});
+  resize();
+
+  const playBtn = document.getElementById('play');
+  const resetBtn = document.getElementById('reset');
+  const speedR = document.getElementById('speed');
+  const fadeR = document.getElementById('fade');
+  const sigmaR = document.getElementById('sigma');
+  const rhoR = document.getElementById('rho');
+  const betaR = document.getElementById('beta');
+
+  let sigma = +sigmaR.value, rho = +rhoR.value, beta = +betaR.value;
+  sigmaR.oninput = ()=> sigma = +sigmaR.value;
+  rhoR.oninput = ()=> rho = +rhoR.value;
+  betaR.oninput = ()=> beta = +betaR.value;
+
+  let playing = true;
+  playBtn.onclick = ()=>{
+    playing = !playing;
+    playBtn.textContent = playing ? '⏸' : '▶';
+    if(playing) loop();
+  };
+  resetBtn.onclick = reset;
+
+  // Camera & controls
+  let yaw = -0.6, pitch = 0.2, dist = 60;
+  let lastTouches = [], tapTimer = 0;
+
+  function getTouches(e){ return Array.from(e.touches).map(t=>({x:t.clientX,y:t.clientY})); }
+
+  cvs.addEventListener('touchstart', e=>{
+    lastTouches = getTouches(e);
+    if(lastTouches.length===1) tapTimer = Date.now();
+  }, {passive:true});
+
+  cvs.addEventListener('touchmove', e=>{
+    const t = getTouches(e);
+    if(t.length===1 && lastTouches.length===1){
+      const dx = t[0].x - lastTouches[0].x;
+      const dy = t[0].y - lastTouches[0].y;
+      yaw += dx * 0.005;
+      pitch += dy * 0.005;
+      pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    } else if(t.length===2 && lastTouches.length===2){
+      const d1 = Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y);
+      const d0 = Math.hypot(lastTouches[0].x - lastTouches[1].x, lastTouches[0].y - lastTouches[1].y);
+      dist *= d0 > 0 ? d0/d1 : 1;
+      dist = Math.max(20, Math.min(200, dist));
+    }
+    lastTouches = t;
+  }, {passive:true});
+
+  cvs.addEventListener('touchend', e=>{
+    if(e.touches.length===0 && Date.now() - tapTimer < 200) playBtn.click();
+    lastTouches = getTouches(e);
+  });
+
+  let dragging=false, lx=0, ly=0;
+  cvs.addEventListener('mousedown', e=>{ dragging=true; lx=e.clientX; ly=e.clientY; });
+  addEventListener('mousemove', e=>{
+    if(!dragging) return;
+    yaw += (e.clientX - lx)*0.005;
+    pitch += (e.clientY - ly)*0.005;
+    pitch = Math.max(-1.3, Math.min(1.3, pitch));
+    lx = e.clientX; ly = e.clientY;
+  });
+  addEventListener('mouseup', ()=> dragging=false);
+  addEventListener('wheel', e=>{
+    dist *= (1 + e.deltaY * 0.001);
+    dist = Math.max(20, Math.min(200, dist));
+  }, {passive:true});
+
+  // Lorenz system
+  let x=0.01, y=0, z=0;
+  let dt = 0.005;
+  function f(x,y,z){
+    return {
+      dx: sigma*(y - x),
+      dy: x*(rho - z) - y,
+      dz: x*y - beta*z
+    };
+  }
+  function rk4(x,y,z,dt){
+    const k1 = f(x,y,z);
+    const k2 = f(x + dt*0.5*k1.dx, y + dt*0.5*k1.dy, z + dt*0.5*k1.dz);
+    const k3 = f(x + dt*0.5*k2.dx, y + dt*0.5*k2.dy, z + dt*0.5*k2.dz);
+    const k4 = f(x + dt*k3.dx, y + dt*k3.dy, z + dt*k3.dz);
+    x += dt*(k1.dx + 2*k2.dx + 2*k3.dx + k4.dx)/6;
+    y += dt*(k1.dy + 2*k2.dy + 2*k3.dy + k4.dy)/6;
+    z += dt*(k1.dz + 2*k2.dz + 2*k3.dz + k4.dz)/6;
+    return {x,y,z};
+  }
+
+  
+  function clearAll(){
+    ctx.fillStyle = '#050713';
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function reset(){
+    x=0.01; y=0; z=0;
+    clearAll();
+  }
+
+  let hue=0;
+  // Projection (3D rotate + perspective), now also returning "persp" for depth styling
+function project(px, py, pz){
+  const cy=Math.cos(yaw), sy=Math.sin(yaw);
+  const cp=Math.cos(pitch), sp=Math.sin(pitch);
+  let X = cy*px - sy*pz;
+  let Z = sy*px + cy*pz;
+  let Y = cp*py - sp*Z;
+  Z = sp*py + cp*Z;
+  const scale = Math.min(W,H) * 0.9;
+  const persp = dist / (dist + Z + 0.5 + 40); // ~0..1 (closer -> larger)
+  return {
+    sx: W/2 + (X * persp * scale * 0.01),
+    sy: H/2 + (Y * persp * scale * 0.01),
+    persp
+  };
+}
+
+// --- Elegant renderer: monochrome, depth-based styling, subtle glow ---
+function loop(){
+  if(!playing) return;
+
+  const fade = +fadeR.value; // 0..20
+  if(fade>0){
+    // gentle trail fade
+    ctx.fillStyle = `rgba(5,7,19,${fade/240})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  const speedMul = +speedR.value;
+
+  // Soft glow
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = 'rgba(204,220,255,0.35)'; // whisper glow, not neon
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Monochrome ink (cool gray-blue)
+  const baseHue = 212, sat = 18, light = 86; // gentle, desaturated
+
+  // Draw as short segments so we can vary width/alpha by depth
+  let p0 = project(x,y,z);
+  for(let i=0;i<220*speedMul;i++){
+    const s = rk4(x,y,z,dt);
+    x=s.x; y=s.y; z=s.z;
+
+    const p1 = project(x,y,z);
+
+    // Depth styling: closer -> thicker & slightly more opaque
+    const a = 0.18 + 0.42 * p1.persp;          // 0.18..~0.60
+    const w = Math.max(0.6, Math.min(2.4, DPR * (0.7 + 1.6*p1.persp)));
+
+    ctx.lineWidth = w;
+    ctx.strokeStyle = `hsla(${baseHue}, ${sat}%, ${light}%, ${a})`;
+
+    ctx.beginPath();
+    ctx.moveTo(p0.sx, p0.sy);
+    ctx.lineTo(p1.sx, p1.sy);
+    ctx.stroke();
+
+    p0 = p1;
+  }
+
+  requestAnimationFrame(loop);
+}
+
+  clearAll();
+  loop();
+})();
+</script>
+</body>
+</html>

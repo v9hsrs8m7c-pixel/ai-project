@@ -1,0 +1,31 @@
+<!--
+ * @Author: JieLiao
+ * @Date: 2025-01-24 16:35:44
+ * @Description: 贪吃蛇小游戏 
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>贪吃蛇小游戏</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <!-- 添加标题 -->
+    <h1>贪吃蛇小游戏</h1>
+    <div class="score-container">
+      <span>得分：</span>
+      <span id="scoreDisplay">0</span>
+    </div>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <!-- 添加按钮容器 -->
+    <div class="button-container">
+      <button id="startButton" class="start-button">开始游戏</button>
+      <button id="pauseButton" class="pause-button">暂停游戏</button>
+      <button id="restartButton" class="restart-button">重新开始</button>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>

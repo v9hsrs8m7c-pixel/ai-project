@@ -1,0 +1,1652 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mini-Unity Sandbox (Terrain + Gizmos + Prefabs + Physics + glTF Import + AI Builder)</title>
+
+    <style>
+      html, body { margin:0; height:100%; overflow:hidden; background:#000; }
+      #ui {
+        position: fixed; left: 12px; top: 12px; width: 460px; max-height: calc(100vh - 24px);
+        overflow: auto; color: #fff; font: 14px/1.35 system-ui, sans-serif;
+        background: rgba(0,0,0,0.62); border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 14px; padding: 12px;
+      }
+      .row { display:flex; gap:8px; align-items:center; margin: 6px 0; }
+      .row > label { width: 130px; opacity: 0.85; }
+      input, select, button, textarea {
+        background: rgba(255,255,255,0.08); color:#fff;
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 10px; padding: 8px 10px; font: inherit;
+      }
+      button { cursor:pointer; }
+      button:disabled { opacity:0.5; cursor:not-allowed; }
+      textarea { width: 100%; height: 160px; resize: vertical; }
+      h3 { margin: 10px 0 6px; font-size: 14px; opacity: 0.95; }
+      .muted { opacity: 0.75; font-size: 12px; }
+      .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.12); font-size: 12px; }
+      .hr { height: 1px; background: rgba(255,255,255,0.15); margin: 10px 0; }
+
+      #hud {
+        position: fixed; left: 12px; bottom: 12px; color:#fff; font: 13px/1.35 system-ui, sans-serif;
+        background: rgba(0,0,0,0.45); padding: 10px 12px; border-radius: 12px;
+        pointer-events: none;
+      }
+      #crosshair {
+        position: fixed; left: 50%; top: 50%; width: 12px; height: 12px; transform: translate(-50%, -50%);
+        pointer-events: none; display:none;
+      }
+      #crosshair:before,#crosshair:after{ content:""; position:absolute; background:rgba(255,255,255,0.85); }
+      #crosshair:before{ left:5px; top:0; width:2px; height:12px; }
+      #crosshair:after { left:0; top:5px; width:12px; height:2px; }
+
+      #placeHint {
+        position: fixed; left: 50%; top: 16px; transform: translateX(-50%);
+        color:#fff; font: 13px/1.35 system-ui, sans-serif;
+        background: rgba(0,0,0,0.55); padding: 8px 10px; border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.14);
+        display:none;
+      }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <!-- Puter.js (AI in frontend, no API key) -->
+    <script src="https://js.puter.com/v2/"></script>
+  </head>
+
+  <body>
+    <div id="placeHint">Placing model: Move mouse • Click to place • Esc to cancel • Q/E rotate</div>
+
+    <div id="ui">
+      <div class="row" style="justify-content:space-between;">
+        <div><b>Mini-Unity Sandbox</b> <span id="modePill" class="pill">EDIT</span></div>
+        <button id="toggleModeBtn" title="Tab">Toggle (Tab)</button>
+      </div>
+
+      <div class="muted">
+        <b>Edit</b>: Orbit camera, click to select, gizmos W/E/R, paint terrain, import models.<br/>
+        <b>Play</b>: WASD/Space/Shift, walkable sculpted terrain, no-overlap colliders.
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Create</h3>
+      <div class="row">
+        <button id="addBoxBtn">Add Box</button>
+        <button id="addSphereBtn">Add Sphere</button>
+        <button id="addLightBtn">Add Light</button>
+      </div>
+      <div class="row">
+        <button id="importUrlBtn">Import glTF URL</button>
+        <button id="importFileBtn">Import .glb/.gltf File</button>
+        <input id="fileInput" type="file" accept=".glb,.gltf" style="display:none" />
+      </div>
+      <div class="muted">
+        URL imports may fail due to CORS (depends on hosting). Local file import works almost anywhere.
+      </div>
+
+      <!-- AI Builder -->
+      <div class="hr"></div>
+      <h3>AI Builder</h3>
+      <div class="row">
+        <input id="aiPrompt" style="flex:1" placeholder="e.g. build a small town with roads, river, bridge" />
+        <button id="aiGenerateBtn">Generate</button>
+      </div>
+      <div class="row">
+        <label>Model</label>
+        <select id="aiModel" style="flex:1">
+          <option value="gpt-4.1-nano">gpt-4.1-nano</option>
+          <option value="gpt-5-nano">gpt-5-nano</option>
+          <option value="claude-sonnet-4">claude-sonnet-4</option>
+          <option value="google/gemini-2.5-flash">google/gemini-2.5-flash</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Mode</label>
+        <select id="aiApplyMode" style="flex:1">
+          <option value="add">Add to scene</option>
+          <option value="clear">Clear then build</option>
+        </select>
+      </div>
+      <div class="muted" id="aiStatus">Tip: Try “create a jump parkour course” or “make a castle on a hill.”</div>
+
+      <div class="hr"></div>
+
+      <h3>Selection</h3>
+      <div class="row"><span class="muted" id="selLabel">None selected</span></div>
+      <div class="row">
+        <button id="deleteBtn" disabled>Delete</button>
+        <button id="focusBtn" disabled>Focus</button>
+      </div>
+
+      <h3>Gizmo</h3>
+      <div class="row">
+        <label>Mode</label>
+        <select id="gizmoMode">
+          <option value="translate">Translate (W)</option>
+          <option value="rotate">Rotate (E)</option>
+          <option value="scale">Scale (R)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Space</label>
+        <select id="gizmoSpace">
+          <option value="world">World (Q)</option>
+          <option value="local">Local (Q)</option>
+        </select>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Prefabs</h3>
+      <div class="row">
+        <button id="makePrefabBtn" disabled>Create Prefab</button>
+        <button id="spawnPrefabBtn" disabled>Spawn Selected Prefab</button>
+      </div>
+      <div class="row">
+        <label>Prefab</label>
+        <select id="prefabList" style="flex:1"></select>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Terrain Tools</h3>
+      <div class="row">
+        <label>Paint</label>
+        <select id="terrainMode">
+          <option value="off">Off</option>
+          <option value="raise">Raise</option>
+          <option value="lower">Lower</option>
+          <option value="flatten">Flatten</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Brush size</label>
+        <input id="brushSize" type="number" step="0.5" value="3.0" />
+      </div>
+      <div class="row">
+        <label>Strength</label>
+        <input id="brushStrength" type="number" step="0.1" value="1.5" />
+      </div>
+      <div class="row">
+        <label>Flatten Y</label>
+        <input id="flattenY" type="number" step="0.1" value="0.0" />
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Physics / Settings</h3>
+      <div class="row"><label>Gravity</label><input id="p_gravity" type="number" step="0.5" value="18" /></div>
+      <div class="row"><label>Jump speed</label><input id="p_jump" type="number" step="0.1" value="7.2" /></div>
+      <div class="row"><label>Accel</label><input id="p_accel" type="number" step="0.5" value="26" /></div>
+      <div class="row"><label>Friction (G)</label><input id="p_fg" type="number" step="0.5" value="5" /></div>
+      <div class="row"><label>Friction (Air)</label><input id="p_fa" type="number" step="0.1" value="2.5" /></div>
+      <div class="row"><label>Walk speed</label><input id="p_walk" type="number" step="0.1" value="4.8" /></div>
+      <div class="row"><label>Sprint speed</label><input id="p_sprint" type="number" step="0.1" value="7.5" /></div>
+      <div class="row"><label>Player height</label><input id="p_height" type="number" step="0.05" value="1.7" /></div>
+      <div class="row"><label>Player radius</label><input id="p_radius" type="number" step="0.05" value="0.35" /></div>
+      <div class="row">
+        <button id="applyPhysicsBtn">Apply</button>
+        <button id="resetPhysicsBtn">Reset</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Save / Load</h3>
+      <div class="row">
+        <button id="exportBtn">Export JSON</button>
+        <button id="loadBtn">Load JSON</button>
+      </div>
+      <textarea id="jsonArea" placeholder="Scene JSON..."></textarea>
+      <div class="muted">
+        Note: URL-imported models persist. Local file imports cannot auto-reload after refresh (browser limitation).
+      </div>
+    </div>
+
+    <div id="hud">
+      <div><b>Keys</b>: Tab edit/play · W/E/R gizmo · Q local/world · Del delete · Ctrl+D duplicate · H hitbox</div>
+      <div class="muted" id="hudLine">Edit: click select. Play: WASD + Space.</div>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { TransformControls } from "three/addons/controls/TransformControls.js";
+      import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+      import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+      // ---------------- DOM ----------------
+      const ui = document.getElementById("ui");
+      const modePill = document.getElementById("modePill");
+      const toggleModeBtn = document.getElementById("toggleModeBtn");
+      const selLabel = document.getElementById("selLabel");
+      const deleteBtn = document.getElementById("deleteBtn");
+      const focusBtn = document.getElementById("focusBtn");
+      const addBoxBtn = document.getElementById("addBoxBtn");
+      const addSphereBtn = document.getElementById("addSphereBtn");
+      const addLightBtn = document.getElementById("addLightBtn");
+      const importUrlBtn = document.getElementById("importUrlBtn");
+      const importFileBtn = document.getElementById("importFileBtn");
+      const fileInput = document.getElementById("fileInput");
+
+      const aiPrompt = document.getElementById("aiPrompt");
+      const aiGenerateBtn = document.getElementById("aiGenerateBtn");
+      const aiModel = document.getElementById("aiModel");
+      const aiApplyMode = document.getElementById("aiApplyMode");
+      const aiStatus = document.getElementById("aiStatus");
+
+      const gizmoMode = document.getElementById("gizmoMode");
+      const gizmoSpace = document.getElementById("gizmoSpace");
+
+      const makePrefabBtn = document.getElementById("makePrefabBtn");
+      const spawnPrefabBtn = document.getElementById("spawnPrefabBtn");
+      const prefabList = document.getElementById("prefabList");
+
+      const terrainMode = document.getElementById("terrainMode");
+      const brushSize = document.getElementById("brushSize");
+      const brushStrength = document.getElementById("brushStrength");
+      const flattenY = document.getElementById("flattenY");
+
+      const p_gravity = document.getElementById("p_gravity");
+      const p_jump = document.getElementById("p_jump");
+      const p_accel = document.getElementById("p_accel");
+      const p_fg = document.getElementById("p_fg");
+      const p_fa = document.getElementById("p_fa");
+      const p_walk = document.getElementById("p_walk");
+      const p_sprint = document.getElementById("p_sprint");
+      const p_height = document.getElementById("p_height");
+      const p_radius = document.getElementById("p_radius");
+      const applyPhysicsBtn = document.getElementById("applyPhysicsBtn");
+      const resetPhysicsBtn = document.getElementById("resetPhysicsBtn");
+
+      const exportBtn = document.getElementById("exportBtn");
+      const loadBtn = document.getElementById("loadBtn");
+      const jsonArea = document.getElementById("jsonArea");
+
+      const hudLine = document.getElementById("hudLine");
+      const crosshair = document.getElementById("crosshair");
+      const placeHint = document.getElementById("placeHint");
+
+      // ---------------- Helpers ----------------
+      function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+      function num(v, fallback) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+
+      // ---------------- Player config ----------------
+      const DEFAULT_PLAYER = {
+        height: 1.7, radius: 0.35,
+        gravity: 18, jumpSpeed: 7.2,
+        accel: 26, frictionGround: 5, frictionAir: 2.5,
+        walkSpeed: 4.8, sprintSpeed: 7.5,
+        skin: 0.002, maxSubstepDist: 0.35, clampIters: 10,
+        groundSnapEps: 0.06
+      };
+      const PLAYER = structuredClone(DEFAULT_PLAYER);
+
+      // Jump feel helpers
+      const COYOTE_TIME = 0.12;
+      const JUMP_BUFFER = 0.12;
+      let coyoteTimer = 0;
+      let jumpBufferTimer = 0;
+
+      // ---------------- Three setup ----------------
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.Fog(0x0b1020, 30, 180);
+
+      const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 800);
+      camera.position.set(10, 10, 14);
+
+      scene.add(new THREE.HemisphereLight(0xaec6ff, 0x223311, 0.65));
+      const sun = new THREE.DirectionalLight(0xffffff, 1.05);
+      sun.position.set(14, 22, 10);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.camera.near = 1;
+      sun.shadow.camera.far = 180;
+      sun.shadow.camera.left = -80;
+      sun.shadow.camera.right = 80;
+      sun.shadow.camera.top = 80;
+      sun.shadow.camera.bottom = -80;
+      scene.add(sun);
+
+      const grid = new THREE.GridHelper(300, 300, 0x335577, 0x223344);
+      grid.material.opacity = 0.35;
+      grid.material.transparent = true;
+      scene.add(grid);
+
+      // ---------------- Terrain ----------------
+      const TERRAIN = { size: 220, segments: 160 };
+      const terrainGeo = new THREE.PlaneGeometry(TERRAIN.size, TERRAIN.size, TERRAIN.segments, TERRAIN.segments);
+      terrainGeo.rotateX(-Math.PI / 2);
+      terrainGeo.computeVertexNormals();
+
+      const terrain = new THREE.Mesh(
+        terrainGeo,
+        new THREE.MeshStandardMaterial({ color: 0x203040, roughness: 1 })
+      );
+      terrain.receiveShadow = true;
+      terrain.name = "Terrain";
+      terrain.userData.type = "terrain";
+      scene.add(terrain);
+
+      const vPos = terrainGeo.attributes.position;
+      const vCount = vPos.count;
+
+      // Walkable terrain height via raycast
+      const terrainRay = new THREE.Raycaster();
+      const terrainHits = [];
+      const rayOrigin = new THREE.Vector3();
+      function terrainHeightAt(x, z) {
+        rayOrigin.set(x, 300, z);
+        terrainRay.set(rayOrigin, new THREE.Vector3(0, -1, 0));
+        terrainRay.far = 1000;
+        terrainHits.length = 0;
+        terrainRay.intersectObject(terrain, false, terrainHits);
+        return terrainHits.length ? terrainHits[0].point.y : 0;
+      }
+
+      // ---------------- Registries ----------------
+      const sandboxObjects = []; // includes meshes, model roots, light handles (NOT terrain)
+      const colliders = [];
+      const rayPickables = [];
+      const prefabs = [];
+
+      // For faster collision: store precomputed AABB for colliders
+      function updateColliderBoxFor(obj) {
+        obj.userData = obj.userData || {};
+        if (!obj.userData.colliderBox) obj.userData.colliderBox = new THREE.Box3();
+        obj.userData.colliderBox.setFromObject(obj);
+      }
+      function updateAllColliderBoxes() {
+        for (const c of colliders) updateColliderBoxFor(c);
+      }
+
+      function refreshLists() {
+        colliders.length = 0;
+        rayPickables.length = 0;
+
+        rayPickables.push(terrain);
+
+        for (const o of sandboxObjects) {
+          if (o.isObject3D) rayPickables.push(o);
+          if (o.isObject3D && o.userData?.collider) colliders.push(o);
+        }
+        for (const c of colliders) updateColliderBoxFor(c);
+      }
+
+      function standardMat(hex = "#6aa0ff") {
+        return new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: 0.9 });
+      }
+
+      // ---------------- Basic primitives ----------------
+      function addBox(opts = {}) {
+        const sx = opts.sx ?? 1.6, sy = opts.sy ?? 1.6, sz = opts.sz ?? 1.6;
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), standardMat(opts.color ?? "#6aa0ff"));
+        mesh.position.set(opts.x ?? 0, opts.y ?? (sy/2), opts.z ?? 0);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        mesh.name = opts.name ?? `Box_${crypto.randomUUID().slice(0,6)}`;
+        mesh.userData = mesh.userData || {};
+        mesh.userData.type = "box";
+        mesh.userData.geom = { sx, sy, sz };
+        mesh.userData.collider = opts.collider ?? true;
+        mesh.userData.interactable = opts.interactable ?? true;
+        mesh.userData.isSandboxRoot = true;
+        scene.add(mesh);
+        sandboxObjects.push(mesh);
+        refreshLists();
+        return mesh;
+      }
+
+      function addSphere(opts = {}) {
+        const r = opts.r ?? 0.75;
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 24), standardMat(opts.color ?? "#66ffcc"));
+        mesh.position.set(opts.x ?? 0, opts.y ?? r, opts.z ?? -4);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        mesh.name = opts.name ?? `Sphere_${crypto.randomUUID().slice(0,6)}`;
+        mesh.userData = mesh.userData || {};
+        mesh.userData.type = "sphere";
+        mesh.userData.geom = { r };
+        mesh.userData.collider = opts.collider ?? true;
+        mesh.userData.interactable = opts.interactable ?? true;
+        mesh.userData.isSandboxRoot = true;
+        scene.add(mesh);
+        sandboxObjects.push(mesh);
+        refreshLists();
+        return mesh;
+      }
+
+      function addPointLight(opts = {}) {
+        const light = new THREE.PointLight(0xffffff, opts.intensity ?? 1.0, opts.distance ?? 35);
+        light.position.set(opts.x ?? 2, opts.y ?? 6, opts.z ?? 2);
+        light.name = opts.name ?? `Light_${crypto.randomUUID().slice(0,6)}`;
+        scene.add(light);
+
+        const handle = new THREE.Mesh(
+          new THREE.SphereGeometry(0.25, 16, 16),
+          new THREE.MeshStandardMaterial({ color: 0xffff88, roughness: 0.6 })
+        );
+        handle.position.copy(light.position);
+        handle.castShadow = true;
+        handle.receiveShadow = true;
+        handle.name = light.name;
+        handle.userData = handle.userData || {};
+        handle.userData.type = "light";
+        handle.userData.isSandboxRoot = true;
+        handle.userData.collider = false;
+        handle.userData.interactable = true;
+        handle.userData.lightRef = light;
+        scene.add(handle);
+
+        sandboxObjects.push(handle);
+        refreshLists();
+        return handle;
+      }
+
+      function syncLightHandles() {
+        for (const o of sandboxObjects) {
+          if (o.userData?.type === "light" && o.userData.lightRef) {
+            o.userData.lightRef.position.copy(o.position);
+          }
+        }
+      }
+
+      // Seed some objects
+      addBox({ x: 4, y: terrainHeightAt(4, -6) + 1, z: -6, sx: 2, sy: 2, sz: 2, color: "#8a6cff" });
+      addBox({ x: -3, y: terrainHeightAt(-3, -8) + 1.25, z: -8, sx: 2.2, sy: 2.5, sz: 2.2, color: "#6cff9a" });
+      addSphere({ x: -6, y: terrainHeightAt(-6, -4) + 1.0, z: -4, r: 1.0, color: "#ffaa66", collider: true });
+      addPointLight({ x: 2, y: 6, z: 2 });
+
+      // ---------------- Controls ----------------
+      const orbit = new OrbitControls(camera, renderer.domElement);
+      orbit.enableDamping = true;
+      orbit.dampingFactor = 0.08;
+      orbit.target.set(0, 1, 0);
+
+      const pointerLock = new PointerLockControls(camera, document.body);
+
+      const tControls = new TransformControls(camera, renderer.domElement);
+      tControls.setMode("translate");
+      tControls.setSpace("world");
+      tControls.addEventListener("dragging-changed", (e) => {
+        orbit.enabled = !e.value;
+      });
+      scene.add(tControls);
+
+      // ---------------- Selection ----------------
+      let selected = null;
+      const outline = new THREE.BoxHelper(new THREE.Object3D(), 0xffff00);
+      outline.visible = false;
+      scene.add(outline);
+
+      function getSandboxRootFromHit(obj) {
+        let cur = obj;
+        while (cur) {
+          if (cur.userData?.isSandboxRoot) return cur;
+          cur = cur.parent;
+        }
+        return obj;
+      }
+
+      function canPrefab(obj) {
+        return obj && obj.isMesh && (obj.userData?.type === "box" || obj.userData?.type === "sphere");
+      }
+
+      function setSelected(obj) {
+        selected = obj ? getSandboxRootFromHit(obj) : null;
+
+        if (!selected) {
+          outline.visible = false;
+          tControls.detach();
+          selLabel.textContent = "None selected";
+          deleteBtn.disabled = true;
+          focusBtn.disabled = true;
+          makePrefabBtn.disabled = true;
+          spawnPrefabBtn.disabled = prefabs.length === 0;
+          gizmoMode.disabled = true;
+          gizmoSpace.disabled = true;
+          return;
+        }
+
+        if (selected === terrain) {
+          outline.visible = false;
+          tControls.detach();
+          selLabel.textContent = "Selected: Terrain";
+          deleteBtn.disabled = true;
+          focusBtn.disabled = false;
+          makePrefabBtn.disabled = true;
+          spawnPrefabBtn.disabled = prefabs.length === 0;
+          gizmoMode.disabled = true;
+          gizmoSpace.disabled = true;
+          return;
+        }
+
+        outline.setFromObject(selected);
+        outline.visible = true;
+        tControls.attach(selected);
+
+        selLabel.textContent = `Selected: ${selected.name} (${selected.userData?.type ?? "object"})`;
+        deleteBtn.disabled = false;
+        focusBtn.disabled = false;
+        makePrefabBtn.disabled = !canPrefab(selected);
+        spawnPrefabBtn.disabled = prefabs.length === 0;
+        gizmoMode.disabled = false;
+        gizmoSpace.disabled = false;
+      }
+
+      function updateOutline() {
+        if (!selected || selected === terrain) return;
+        outline.setFromObject(selected);
+      }
+
+      // ---------------- Mode switching ----------------
+      let mode = "edit";
+      function setMode(next) {
+        mode = next;
+        modePill.textContent = mode.toUpperCase();
+
+        if (mode === "edit") {
+          ui.style.display = "block";
+          crosshair.style.display = "none";
+          hudLine.textContent = "Edit: Orbit, click select, W/E/R gizmos, import models, paint terrain.";
+          orbit.enabled = true;
+          tControls.enabled = true;
+          if (document.pointerLockElement) document.exitPointerLock?.();
+        } else {
+          if (placing) cancelPlacement();
+          ui.style.display = "none";
+          crosshair.style.display = "block";
+          hudLine.textContent = "Play: WASD move, Space jump, Shift sprint. Terrain walkable + object collision.";
+          orbit.enabled = false;
+          tControls.detach();
+          tControls.enabled = false;
+          outline.visible = false;
+          camera.position.set(player.feet.x, player.feet.y + PLAYER.height, player.feet.z);
+        }
+      }
+
+      // ---------------- Player + collision ----------------
+      const player = { feet: new THREE.Vector3(0, 0, 12), vel: new THREE.Vector3(), grounded: true };
+      player.feet.y = terrainHeightAt(player.feet.x, player.feet.z);
+
+      const hitbox = new THREE.Mesh(
+        new THREE.BoxGeometry(PLAYER.radius*2, PLAYER.height, PLAYER.radius*2),
+        new THREE.MeshBasicMaterial({ wireframe: true, transparent: true, opacity: 0.35 })
+      );
+      hitbox.visible = false;
+      scene.add(hitbox);
+
+      function rebuildHitbox() {
+        hitbox.geometry?.dispose?.();
+        hitbox.geometry = new THREE.BoxGeometry(PLAYER.radius * 2, PLAYER.height, PLAYER.radius * 2);
+      }
+
+      function syncPlayerCameraHitbox() {
+        if (mode === "play") camera.position.set(player.feet.x, player.feet.y + PLAYER.height, player.feet.z);
+        hitbox.position.set(player.feet.x, player.feet.y + PLAYER.height/2, player.feet.z);
+      }
+
+      function playerBoxAt(feet) {
+        return new THREE.Box3(
+          new THREE.Vector3(feet.x - PLAYER.radius, feet.y, feet.z - PLAYER.radius),
+          new THREE.Vector3(feet.x + PLAYER.radius, feet.y + PLAYER.height, feet.z + PLAYER.radius)
+        );
+      }
+
+      function collidesWithObjectsAt(feet) {
+        const b = playerBoxAt(feet);
+        for (const c of colliders) {
+          const cb = c.userData?.colliderBox;
+          if (cb && b.intersectsBox(cb)) return true;
+        }
+        return false;
+      }
+
+      function clampMoveAxis(feet, axis, delta) {
+        if (delta === 0) return 0;
+
+        const start = feet.clone();
+        const target = feet.clone();
+        target[axis] += delta;
+
+        if (!collidesWithObjectsAt(target)) { feet.copy(target); return delta; }
+
+        const tiny = feet.clone();
+        tiny[axis] += Math.sign(delta) * PLAYER.skin;
+        if (collidesWithObjectsAt(tiny)) return 0;
+
+        let lo = 0, hi = 1;
+        for (let i = 0; i < PLAYER.clampIters; i++) {
+          const mid = (lo + hi) * 0.5;
+          const test = start.clone();
+          test[axis] += delta * mid;
+          if (!collidesWithObjectsAt(test)) lo = mid; else hi = mid;
+        }
+        const moved = delta * lo;
+        feet[axis] += moved;
+        return moved;
+      }
+
+      function resolveTerrainGrounding() {
+        const h = terrainHeightAt(player.feet.x, player.feet.z);
+        const dist = player.feet.y - h;
+
+        if (dist < 0) {
+          player.feet.y = h;
+          player.vel.y = 0;
+          player.grounded = true;
+          coyoteTimer = COYOTE_TIME;
+          return;
+        }
+
+        if (dist <= PLAYER.groundSnapEps && player.vel.y <= 0) {
+          player.feet.y = h;
+          player.vel.y = 0;
+          player.grounded = true;
+          coyoteTimer = COYOTE_TIME;
+          return;
+        }
+
+        player.grounded = false;
+      }
+
+      function forwardRight() {
+        const f = new THREE.Vector3();
+        camera.getWorldDirection(f);
+        f.y = 0; f.normalize();
+        const r = new THREE.Vector3().crossVectors(f, new THREE.Vector3(0,1,0)).normalize();
+        return { f, r };
+      }
+
+      function moveAndCollide(dt) {
+        const speed = player.vel.length();
+        const steps = Math.max(1, Math.ceil((speed * dt) / PLAYER.maxSubstepDist));
+        const stepDt = dt / steps;
+
+        for (let i = 0; i < steps; i++) {
+          const dx = player.vel.x * stepDt;
+          const mx = clampMoveAxis(player.feet, "x", dx);
+          if (mx !== dx) player.vel.x = 0;
+
+          const dz = player.vel.z * stepDt;
+          const mz = clampMoveAxis(player.feet, "z", dz);
+          if (mz !== dz) player.vel.z = 0;
+
+          const dy = player.vel.y * stepDt;
+          const my = clampMoveAxis(player.feet, "y", dy);
+          if (my !== dy) player.vel.y = 0;
+
+          resolveTerrainGrounding();
+        }
+      }
+
+      // ---------------- Terrain sculpting ----------------
+      function sculptTerrainAt(worldPoint, modeName, radius, strength, flattenHeight) {
+        const r2 = radius * radius;
+        const s = strength;
+
+        for (let i = 0; i < vCount; i++) {
+          const x = vPos.getX(i);
+          const y = vPos.getY(i);
+          const z = vPos.getZ(i);
+
+          const dx = x - worldPoint.x;
+          const dz = z - worldPoint.z;
+          const d2 = dx*dx + dz*dz;
+          if (d2 > r2) continue;
+
+          const t = 1 - Math.sqrt(d2) / radius;
+          const amt = t * t * s * 0.02;
+
+          let newY = y;
+          if (modeName === "raise") newY = y + amt;
+          if (modeName === "lower") newY = y - amt;
+          if (modeName === "flatten") newY = y + (flattenHeight - y) * Math.min(1, amt * 2.0);
+
+          vPos.setY(i, newY);
+        }
+
+        vPos.needsUpdate = true;
+        terrainGeo.computeVertexNormals();
+      }
+
+      // ---------------- Raycasting / picking ----------------
+      const raycaster = new THREE.Raycaster();
+      const mouseNDC = new THREE.Vector2();
+      let mouseDown = false;
+      let lastMouseX = 0, lastMouseY = 0;
+
+      function pickRay(clientX, clientY) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouseNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        mouseNDC.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+        raycaster.setFromCamera(mouseNDC, camera);
+      }
+
+      function pickSelect(clientX, clientY) {
+        pickRay(clientX, clientY);
+        const hits = raycaster.intersectObjects(rayPickables, true);
+        if (!hits.length) { setSelected(null); return; }
+        setSelected(hits[0].object);
+      }
+
+      function paintTerrainIfNeeded() {
+        if (mode !== "edit") return;
+        if (!mouseDown) return;
+        if (placing) return;
+        const m = terrainMode.value;
+        if (m === "off") return;
+        if (tControls.dragging) return;
+
+        pickRay(lastMouseX, lastMouseY);
+        const hits = raycaster.intersectObject(terrain, false);
+        if (!hits.length) return;
+
+        const radius = Math.max(0.1, num(brushSize.value, 3));
+        const strength = Math.max(0, num(brushStrength.value, 1.5));
+        const flat = num(flattenY.value, 0);
+
+        sculptTerrainAt(hits[0].point, m, radius, strength, flat);
+        resolveTerrainGrounding();
+      }
+
+      // ---------------- Prefabs ----------------
+      function refreshPrefabUI() {
+        prefabList.innerHTML = "";
+        for (let i = 0; i < prefabs.length; i++) {
+          const opt = document.createElement("option");
+          opt.value = String(i);
+          opt.textContent = prefabs[i].name;
+          prefabList.appendChild(opt);
+        }
+        spawnPrefabBtn.disabled = prefabs.length === 0;
+      }
+
+      function snapshotAsPrefab(obj) {
+        const type = obj.userData?.type;
+        if (!obj?.isMesh || (type !== "box" && type !== "sphere")) return null;
+        const matColor = obj.material?.color ? "#" + obj.material.color.getHexString() : "#ffffff";
+        return {
+          name: obj.name + "_Prefab",
+          type,
+          geom: structuredClone(obj.userData.geom ?? {}),
+          material: { color: matColor },
+          collider: !!obj.userData.collider,
+          interactable: !!obj.userData.interactable,
+          scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z }
+        };
+      }
+
+      function spawnPrefab(def, atPos) {
+        let obj;
+        if (def.type === "box") {
+          obj = addBox({
+            sx: def.geom?.sx ?? 1.6, sy: def.geom?.sy ?? 1.6, sz: def.geom?.sz ?? 1.6,
+            color: def.material?.color ?? "#6aa0ff",
+            collider: def.collider, interactable: def.interactable
+          });
+        } else if (def.type === "sphere") {
+          obj = addSphere({
+            r: def.geom?.r ?? 0.75,
+            color: def.material?.color ?? "#66ffcc",
+            collider: def.collider, interactable: def.interactable
+          });
+        }
+        if (!obj) return null;
+        obj.name = def.name.replace("_Prefab","") + "_" + crypto.randomUUID().slice(0,4);
+        obj.scale.set(def.scale?.x ?? 1, def.scale?.y ?? 1, def.scale?.z ?? 1);
+        obj.position.copy(atPos);
+        updateColliderBoxFor(obj);
+        refreshLists();
+        return obj;
+      }
+
+      // ---------------- Delete / duplicate / focus ----------------
+      function deleteSelected() {
+        if (!selected || selected === terrain) return;
+
+        if (selected.userData?.type === "light" && selected.userData.lightRef) {
+          scene.remove(selected.userData.lightRef);
+        }
+
+        const idx = sandboxObjects.indexOf(selected);
+        if (idx >= 0) sandboxObjects.splice(idx, 1);
+        scene.remove(selected);
+        setSelected(null);
+        refreshLists();
+      }
+
+      function duplicateSelected() {
+        if (!selected || selected === terrain) return;
+
+        if (selected.isMesh && (selected.userData.type === "box" || selected.userData.type === "sphere")) {
+          const def = snapshotAsPrefab(selected);
+          if (!def) return;
+          const at = selected.position.clone().add(new THREE.Vector3(1.2, 0, 1.2));
+          at.y = Math.max(at.y, terrainHeightAt(at.x, at.z) + 0.2);
+          const o = spawnPrefab(def, at);
+          if (o) setSelected(o);
+          return;
+        }
+
+        alert("Duplicate: supported for Box/Sphere (you can re-import a model if needed).");
+      }
+
+      // ---------------- Physics UI ----------------
+      function syncPhysicsUIFromPlayer() {
+        p_gravity.value = PLAYER.gravity;
+        p_jump.value = PLAYER.jumpSpeed;
+        p_accel.value = PLAYER.accel;
+        p_fg.value = PLAYER.frictionGround;
+        p_fa.value = PLAYER.frictionAir;
+        p_walk.value = PLAYER.walkSpeed;
+        p_sprint.value = PLAYER.sprintSpeed;
+        p_height.value = PLAYER.height;
+        p_radius.value = PLAYER.radius;
+      }
+
+      applyPhysicsBtn.addEventListener("click", () => {
+        PLAYER.gravity = clamp(num(p_gravity.value, PLAYER.gravity), 0, 80);
+        PLAYER.jumpSpeed = clamp(num(p_jump.value, PLAYER.jumpSpeed), 0, 30);
+        PLAYER.accel = clamp(num(p_accel.value, PLAYER.accel), 0, 200);
+        PLAYER.frictionGround = clamp(num(p_fg.value, PLAYER.frictionGround), 0, 80);
+        PLAYER.frictionAir = clamp(num(p_fa.value, PLAYER.frictionAir), 0, 80);
+        PLAYER.walkSpeed = clamp(num(p_walk.value, PLAYER.walkSpeed), 0, 50);
+        PLAYER.sprintSpeed = clamp(num(p_sprint.value, PLAYER.sprintSpeed), 0, 80);
+
+        const oldH = PLAYER.height, oldR = PLAYER.radius;
+        PLAYER.height = clamp(num(p_height.value, PLAYER.height), 0.5, 4.0);
+        PLAYER.radius = clamp(num(p_radius.value, PLAYER.radius), 0.1, 2.0);
+        if (PLAYER.height !== oldH || PLAYER.radius !== oldR) rebuildHitbox();
+
+        resolveTerrainGrounding();
+      });
+
+      resetPhysicsBtn.addEventListener("click", () => {
+        Object.assign(PLAYER, structuredClone(DEFAULT_PLAYER));
+        rebuildHitbox();
+        syncPhysicsUIFromPlayer();
+        resolveTerrainGrounding();
+      });
+
+      syncPhysicsUIFromPlayer();
+
+      // ---------------- glTF import + preview placement ----------------
+      const gltfLoader = new GLTFLoader();
+
+      function markSandboxRoot(obj, name = "Model") {
+        obj.name = name;
+        obj.userData = obj.userData || {};
+        obj.userData.type = "gltf";
+        obj.userData.isSandboxRoot = true;
+        obj.userData.collider = true;
+        obj.userData.interactable = true;
+        return obj;
+      }
+
+      async function importGLTFfromURL(url) {
+        return new Promise((resolve, reject) => {
+          gltfLoader.load(url, resolve, undefined, reject);
+        });
+      }
+
+      async function importGLTFfromFile(file) {
+        const blobURL = URL.createObjectURL(file);
+        try {
+          return await importGLTFfromURL(blobURL);
+        } finally {
+          URL.revokeObjectURL(blobURL);
+        }
+      }
+
+      let placing = null; // { root, yawRad, sourceUrl, isLocalFile }
+
+      function setGhostMaterials(root, enabled) {
+        root.traverse((c) => {
+          if (!c.isMesh) return;
+          c.castShadow = !enabled;
+          c.receiveShadow = !enabled;
+          if (c.material) {
+            c.material = c.material.clone();
+            c.material.transparent = enabled;
+            c.material.opacity = enabled ? 0.5 : 1.0;
+            c.material.depthWrite = !enabled;
+          }
+        });
+      }
+
+      function beginPlacementFromGLTF(gltf, { name, sourceUrl, isLocalFile } = {}) {
+        if (mode !== "edit") setMode("edit");
+        if (placing) cancelPlacement();
+
+        const root = markSandboxRoot(gltf.scene, name ?? `Model_${crypto.randomUUID().slice(0,6)}`);
+
+        root.traverse((c) => {
+          if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+        });
+
+        setGhostMaterials(root, true);
+        scene.add(root);
+
+        placing = {
+          root,
+          yawRad: 0,
+          sourceUrl: sourceUrl ?? null,
+          isLocalFile: !!isLocalFile
+        };
+
+        placeHint.style.display = "block";
+      }
+
+      function cancelPlacement() {
+        if (!placing) return;
+        scene.remove(placing.root);
+        placing = null;
+        placeHint.style.display = "none";
+      }
+
+      function finalizePlacement() {
+        if (!placing) return;
+
+        const root = placing.root;
+        setGhostMaterials(root, false);
+
+        root.userData.sourceUrl = placing.sourceUrl ?? null;
+        root.userData.localOnly = placing.isLocalFile && !placing.sourceUrl;
+
+        sandboxObjects.push(root);
+        refreshLists();
+        updateColliderBoxFor(root);
+
+        setSelected(root);
+        placing = null;
+        placeHint.style.display = "none";
+      }
+
+      const placeRay = new THREE.Raycaster();
+      const placeNDC = new THREE.Vector2();
+      function raycastTerrainAtMouse(clientX, clientY) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        placeNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        placeNDC.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
+        placeRay.setFromCamera(placeNDC, camera);
+        const hits = placeRay.intersectObject(terrain, false);
+        return hits.length ? hits[0].point : null;
+      }
+
+      // ---------------- Save / Load ----------------
+      function exportScene() {
+        const objects = sandboxObjects.map(o => {
+          const base = {
+            name: o.name,
+            type: o.userData?.type ?? "object",
+            position: { x: o.position.x, y: o.position.y, z: o.position.z },
+            rotation: { x: o.rotation.x, y: o.rotation.y, z: o.rotation.z },
+            scale: { x: o.scale.x, y: o.scale.y, z: o.scale.z },
+            collider: !!o.userData?.collider,
+            interactable: !!o.userData?.interactable
+          };
+
+          if (base.type === "box" || base.type === "sphere") {
+            base.geom = structuredClone(o.userData.geom ?? {});
+            base.material = o.material?.color ? { color: "#" + o.material.color.getHexString() } : { color: "#ffffff" };
+          }
+
+          if (base.type === "light") {
+            const light = o.userData.lightRef;
+            base.light = light ? { intensity: light.intensity, distance: light.distance } : { intensity: 1.0, distance: 35 };
+          }
+
+          if (base.type === "gltf") {
+            base.sourceUrl = o.userData?.sourceUrl ?? null;
+            base.localOnly = !!o.userData?.localOnly;
+          }
+
+          return base;
+        });
+
+        const terrainHeights = Array.from({ length: vCount }, (_, i) => vPos.getY(i));
+
+        const out = {
+          version: 1,
+          camera: {
+            position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+            target: { x: orbit.target.x, y: orbit.target.y, z: orbit.target.z }
+          },
+          player: { feet: { x: player.feet.x, y: player.feet.y, z: player.feet.z } },
+          physics: {
+            gravity: PLAYER.gravity,
+            jumpSpeed: PLAYER.jumpSpeed,
+            accel: PLAYER.accel,
+            frictionGround: PLAYER.frictionGround,
+            frictionAir: PLAYER.frictionAir,
+            walkSpeed: PLAYER.walkSpeed,
+            sprintSpeed: PLAYER.sprintSpeed,
+            height: PLAYER.height,
+            radius: PLAYER.radius
+          },
+          prefabs,
+          terrain: { size: TERRAIN.size, segments: TERRAIN.segments, heights: terrainHeights },
+          objects
+        };
+
+        jsonArea.value = JSON.stringify(out, null, 2);
+      }
+
+      function clearSceneObjects() {
+        for (const o of sandboxObjects) {
+          if (o.userData?.type === "light" && o.userData.lightRef) scene.remove(o.userData.lightRef);
+          scene.remove(o);
+        }
+        sandboxObjects.length = 0;
+        setSelected(null);
+        refreshLists();
+      }
+
+      async function loadSceneAsync(text) {
+        const data = JSON.parse(text);
+
+        if (data.terrain?.heights && Array.isArray(data.terrain.heights) && data.terrain.heights.length === vCount) {
+          for (let i = 0; i < vCount; i++) vPos.setY(i, data.terrain.heights[i]);
+          vPos.needsUpdate = true;
+          terrainGeo.computeVertexNormals();
+        }
+
+        if (data.physics) {
+          PLAYER.gravity = clamp(num(data.physics.gravity, PLAYER.gravity), 0, 80);
+          PLAYER.jumpSpeed = clamp(num(data.physics.jumpSpeed, PLAYER.jumpSpeed), 0, 30);
+          PLAYER.accel = clamp(num(data.physics.accel, PLAYER.accel), 0, 200);
+          PLAYER.frictionGround = clamp(num(data.physics.frictionGround, PLAYER.frictionGround), 0, 80);
+          PLAYER.frictionAir = clamp(num(data.physics.frictionAir, PLAYER.frictionAir), 0, 80);
+          PLAYER.walkSpeed = clamp(num(data.physics.walkSpeed, PLAYER.walkSpeed), 0, 50);
+          PLAYER.sprintSpeed = clamp(num(data.physics.sprintSpeed, PLAYER.sprintSpeed), 0, 80);
+
+          const oldH = PLAYER.height, oldR = PLAYER.radius;
+          PLAYER.height = clamp(num(data.physics.height, PLAYER.height), 0.5, 4.0);
+          PLAYER.radius = clamp(num(data.physics.radius, PLAYER.radius), 0.1, 2.0);
+          if (PLAYER.height !== oldH || PLAYER.radius !== oldR) rebuildHitbox();
+          syncPhysicsUIFromPlayer();
+        }
+
+        prefabs.length = 0;
+        if (Array.isArray(data.prefabs)) for (const p of data.prefabs) prefabs.push(p);
+        refreshPrefabUI();
+
+        clearSceneObjects();
+
+        if (Array.isArray(data.objects)) {
+          for (const it of data.objects) {
+            if (it.type === "box") {
+              const o = addBox({
+                sx: it.geom?.sx ?? 1.6, sy: it.geom?.sy ?? 1.6, sz: it.geom?.sz ?? 1.6,
+                color: it.material?.color ?? "#6aa0ff",
+                collider: it.collider ?? true,
+                interactable: it.interactable ?? true
+              });
+              o.name = it.name ?? o.name;
+              o.position.set(it.position?.x ?? 0, it.position?.y ?? 1, it.position?.z ?? 0);
+              o.rotation.set(it.rotation?.x ?? 0, it.rotation?.y ?? 0, it.rotation?.z ?? 0);
+              o.scale.set(it.scale?.x ?? 1, it.scale?.y ?? 1, it.scale?.z ?? 1);
+              updateColliderBoxFor(o);
+            } else if (it.type === "sphere") {
+              const o = addSphere({
+                r: it.geom?.r ?? 0.75,
+                color: it.material?.color ?? "#66ffcc",
+                collider: it.collider ?? true,
+                interactable: it.interactable ?? true
+              });
+              o.name = it.name ?? o.name;
+              o.position.set(it.position?.x ?? 0, it.position?.y ?? 1, it.position?.z ?? -4);
+              o.rotation.set(it.rotation?.x ?? 0, it.rotation?.y ?? 0, it.rotation?.z ?? 0);
+              o.scale.set(it.scale?.x ?? 1, it.scale?.y ?? 1, it.scale?.z ?? 1);
+              updateColliderBoxFor(o);
+            } else if (it.type === "light") {
+              const h = addPointLight({
+                intensity: it.light?.intensity ?? 1.0,
+                distance: it.light?.distance ?? 35
+              });
+              h.name = it.name ?? h.name;
+              h.position.set(it.position?.x ?? 2, it.position?.y ?? 6, it.position?.z ?? 2);
+              h.rotation.set(it.rotation?.x ?? 0, it.rotation?.y ?? 0, it.rotation?.z ?? 0);
+              h.scale.set(it.scale?.x ?? 1, it.scale?.y ?? 1, it.scale?.z ?? 1);
+              syncLightHandles();
+            } else if (it.type === "gltf") {
+              if (it.sourceUrl) {
+                try {
+                  const gltf = await importGLTFfromURL(it.sourceUrl);
+                  const root = markSandboxRoot(gltf.scene, it.name ?? "Model");
+                  root.userData.sourceUrl = it.sourceUrl;
+                  root.userData.localOnly = false;
+                  root.position.set(it.position?.x ?? 0, it.position?.y ?? 0, it.position?.z ?? 0);
+                  root.rotation.set(it.rotation?.x ?? 0, it.rotation?.y ?? 0, it.rotation?.z ?? 0);
+                  root.scale.set(it.scale?.x ?? 1, it.scale?.y ?? 1, it.scale?.z ?? 1);
+
+                  root.traverse((c) => {
+                    if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+                  });
+
+                  scene.add(root);
+                  sandboxObjects.push(root);
+                  refreshLists();
+                  updateColliderBoxFor(root);
+                } catch {
+                  const ph = addBox({ sx: 1.5, sy: 1.0, sz: 1.5, color: "#ff6666" });
+                  ph.name = (it.name ?? "Model") + "_FAILED_URL";
+                  ph.position.set(it.position?.x ?? 0, it.position?.y ?? 1, it.position?.z ?? 0);
+                }
+              } else {
+                const ph = addBox({ sx: 1.5, sy: 1.0, sz: 1.5, color: "#ffaa66" });
+                ph.name = (it.name ?? "Model") + "_REIMPORT_LOCAL";
+                ph.position.set(it.position?.x ?? 0, it.position?.y ?? 1, it.position?.z ?? 0);
+              }
+            }
+          }
+        }
+
+        if (data.camera?.position) camera.position.set(data.camera.position.x ?? 10, data.camera.position.y ?? 10, data.camera.position.z ?? 14);
+        if (data.camera?.target) orbit.target.set(data.camera.target.x ?? 0, data.camera.target.y ?? 1, data.camera.target.z ?? 0);
+
+        if (data.player?.feet) player.feet.set(data.player.feet.x ?? 0, data.player.feet.y ?? 0, data.player.feet.z ?? 12);
+        resolveTerrainGrounding();
+
+        refreshLists();
+        setSelected(null);
+      }
+
+      // ===================== AI BUILDER (Puter.js tool-calling) =====================
+      const aiTools = [{
+        type: "function",
+        function: {
+          name: "apply_scene_plan",
+          description: "Create/modify the sandbox by placing objects and optionally sculpting terrain.",
+          parameters: {
+            type: "object",
+            properties: {
+              objects: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    kind: { type: "string", enum: ["box","sphere","light","gltf_url"] },
+                    name: { type: "string" },
+                    position: {
+                      type: "object",
+                      properties: { x:{type:"number"}, y:{type:"number"}, z:{type:"number"} },
+                      required: ["x","y","z"],
+                      additionalProperties: false
+                    },
+                    rotationY: { type: "number" },
+                    scale: {
+                      type: "object",
+                      properties: { x:{type:"number"}, y:{type:"number"}, z:{type:"number"} },
+                      required: ["x","y","z"],
+                      additionalProperties: false
+                    },
+                    size: {
+                      type: "object",
+                      properties: { x:{type:"number"}, y:{type:"number"}, z:{type:"number"} },
+                      required: ["x","y","z"],
+                      additionalProperties: false
+                    },
+                    radius: { type: "number" },
+                    color: { type: "string" },
+                    intensity: { type: "number" },
+                    distance: { type: "number" },
+                    url: { type: "string" }
+                  },
+                  required: ["kind","position"],
+                  additionalProperties: false
+                }
+              },
+              terrain: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    mode: { type: "string", enum: ["raise","lower","flatten"] },
+                    x: { type: "number" },
+                    z: { type: "number" },
+                    radius: { type: "number" },
+                    strength: { type: "number" },
+                    flattenY: { type: "number" }
+                  },
+                  required: ["mode","x","z","radius","strength"],
+                  additionalProperties: false
+                }
+              }
+            },
+            required: ["objects"],
+            additionalProperties: false
+          },
+          strict: true
+        }
+      }];
+
+      function safeN(v, fb=0) { v = Number(v); return Number.isFinite(v) ? v : fb; }
+
+      async function applyScenePlan(plan, { clearFirst = false } = {}) {
+        if (clearFirst) clearSceneObjects();
+
+        // optional terrain strokes
+        if (Array.isArray(plan.terrain)) {
+          for (const s of plan.terrain) {
+            const x = clamp(safeN(s.x, 0), -TERRAIN.size/2, TERRAIN.size/2);
+            const z = clamp(safeN(s.z, 0), -TERRAIN.size/2, TERRAIN.size/2);
+            const radius = clamp(safeN(s.radius, 4), 0.5, 28);
+            const strength = clamp(safeN(s.strength, 2), 0, 15);
+            const flat = safeN(s.flattenY, 0);
+            const y = terrainHeightAt(x, z);
+            sculptTerrainAt(new THREE.Vector3(x, y, z), s.mode, radius, strength, flat);
+          }
+        }
+
+        for (const o of plan.objects) {
+          const pos = o.position;
+          const px = clamp(safeN(pos.x, 0), -120, 120);
+          const pz = clamp(safeN(pos.z, 0), -120, 120);
+          const groundY = terrainHeightAt(px, pz);
+          let py = Math.max(safeN(pos.y, groundY), groundY);
+
+          const ry = safeN(o.rotationY, 0);
+          const sc = o.scale ? {
+            x: clamp(safeN(o.scale.x, 1), 0.05, 20),
+            y: clamp(safeN(o.scale.y, 1), 0.05, 20),
+            z: clamp(safeN(o.scale.z, 1), 0.05, 20),
+          } : { x:1, y:1, z:1 };
+
+          if (o.kind === "box") {
+            const sx = clamp(safeN(o.size?.x, 2), 0.1, 50);
+            const sy = clamp(safeN(o.size?.y, 2), 0.1, 50);
+            const sz = clamp(safeN(o.size?.z, 2), 0.1, 50);
+            const box = addBox({ x: px, y: py + sy/2, z: pz, sx, sy, sz, color: o.color ?? "#6aa0ff" });
+            box.name = o.name ?? box.name;
+            box.rotation.y = ry;
+            box.scale.set(sc.x, sc.y, sc.z);
+            updateColliderBoxFor(box);
+          }
+
+          if (o.kind === "sphere") {
+            const r = clamp(safeN(o.radius, 1.0), 0.1, 25);
+            const sp = addSphere({ x: px, y: py + r, z: pz, r, color: o.color ?? "#ffaa66" });
+            sp.name = o.name ?? sp.name;
+            sp.rotation.y = ry;
+            sp.scale.set(sc.x, sc.y, sc.z);
+            updateColliderBoxFor(sp);
+          }
+
+          if (o.kind === "light") {
+            const h = addPointLight({
+              x: px, y: py + 6, z: pz,
+              intensity: clamp(safeN(o.intensity, 1.0), 0, 20),
+              distance: clamp(safeN(o.distance, 35), 0, 500)
+            });
+            h.name = o.name ?? h.name;
+            h.rotation.y = ry;
+            h.scale.set(sc.x, sc.y, sc.z);
+            syncLightHandles();
+          }
+
+          if (o.kind === "gltf_url") {
+            const url = (o.url || "").trim();
+            if (!url) continue;
+            try {
+              const gltf = await importGLTFfromURL(url);
+              const root = markSandboxRoot(gltf.scene, o.name ?? `Model_${crypto.randomUUID().slice(0,6)}`);
+              root.userData.sourceUrl = url;
+              root.userData.localOnly = false;
+
+              root.position.set(px, py, pz);
+              root.rotation.y = ry;
+              root.scale.set(sc.x, sc.y, sc.z);
+
+              root.traverse((c) => {
+                if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+              });
+
+              scene.add(root);
+              sandboxObjects.push(root);
+              refreshLists();
+              updateColliderBoxFor(root);
+            } catch {
+              const ph = addBox({ x: px, y: py + 0.5, z: pz, sx: 1.5, sy: 1.0, sz: 1.5, color: "#ff6666" });
+              ph.name = (o.name ?? "Model") + "_FAILED_URL";
+            }
+          }
+        }
+
+        refreshLists();
+        setSelected(null);
+        resolveTerrainGrounding();
+      }
+
+      async function runAIBuilder() {
+        const prompt = (aiPrompt.value || "").trim();
+        if (!prompt) return;
+
+        if (!window.puter?.ai?.chat) {
+          aiStatus.textContent = "Puter.js not loaded. Check <script src='https://js.puter.com/v2/'> is present.";
+          return;
+        }
+
+        aiGenerateBtn.disabled = true;
+        aiStatus.textContent = "Generating...";
+
+        try {
+          const model = aiModel.value;
+          const clearFirst = (aiApplyMode.value === "clear");
+
+          const system = [
+            "You are a level designer for a Three.js sandbox game.",
+            "You MUST respond via a single tool call to apply_scene_plan.",
+            "Keep positions mostly within x,z ∈ [-80, 80].",
+            "Avoid placing objects at player spawn around (x=0,z=12). Leave playable paths.",
+            "Prefer boxes/spheres/lights. Use gltf_url only if user explicitly asks for a known model and you have a direct .glb/.gltf URL."
+          ].join(" ");
+
+          const completion = await window.puter.ai.chat(
+            [{ role: "system", content: system }, { role: "user", content: prompt }],
+            { model, tools: aiTools }
+          );
+
+          const calls = completion?.message?.tool_calls;
+          if (!calls?.length) {
+            aiStatus.textContent = "AI didn't return a tool call. Try: 'make a simple obstacle course with boxes'.";
+            return;
+          }
+
+          const call = calls[0];
+          if (call.function?.name !== "apply_scene_plan") {
+            aiStatus.textContent = "Unexpected tool call name.";
+            return;
+          }
+
+          const args = JSON.parse(call.function.arguments);
+          await applyScenePlan(args, { clearFirst });
+
+          aiStatus.textContent = "Done ✅";
+        } catch (e) {
+          aiStatus.textContent = "Error: " + (e?.message ?? String(e));
+        } finally {
+          aiGenerateBtn.disabled = false;
+        }
+      }
+
+      aiGenerateBtn.addEventListener("click", runAIBuilder);
+      aiPrompt.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); runAIBuilder(); }
+      });
+
+      // ---------------- UI wiring ----------------
+      gizmoMode.addEventListener("change", () => tControls.setMode(gizmoMode.value));
+      gizmoSpace.addEventListener("change", () => tControls.setSpace(gizmoSpace.value));
+
+      makePrefabBtn.addEventListener("click", () => {
+        if (!canPrefab(selected)) return;
+        const def = snapshotAsPrefab(selected);
+        if (!def) return;
+        prefabs.push(def);
+        refreshPrefabUI();
+      });
+
+      spawnPrefabBtn.addEventListener("click", () => {
+        const idx = Number(prefabList.value);
+        if (!Number.isFinite(idx) || !prefabs[idx]) return;
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0; forward.normalize();
+
+        const at = camera.position.clone().add(forward.multiplyScalar(7));
+        at.y = Math.max(at.y, terrainHeightAt(at.x, at.z) + 0.2);
+
+        const o = spawnPrefab(prefabs[idx], at);
+        if (o) setSelected(o);
+      });
+
+      deleteBtn.addEventListener("click", deleteSelected);
+
+      focusBtn.addEventListener("click", () => {
+        if (!selected) return;
+        const p = (selected === terrain) ? new THREE.Vector3(0,0,0) : selected.position.clone();
+        orbit.target.copy(p);
+        camera.position.copy(p.clone().add(new THREE.Vector3(10, 10, 10)));
+      });
+
+      addBoxBtn.addEventListener("click", () => {
+        const at = orbit.target.clone().add(new THREE.Vector3(0, 0, -4));
+        at.y = terrainHeightAt(at.x, at.z) + 1.0;
+        const o = addBox({ x: at.x, y: at.y, z: at.z });
+        setSelected(o);
+      });
+
+      addSphereBtn.addEventListener("click", () => {
+        const at = orbit.target.clone().add(new THREE.Vector3(0, 0, -4));
+        at.y = terrainHeightAt(at.x, at.z) + 1.0;
+        const o = addSphere({ x: at.x, y: at.y, z: at.z });
+        setSelected(o);
+      });
+
+      addLightBtn.addEventListener("click", () => {
+        const at = orbit.target.clone().add(new THREE.Vector3(2, 6, 2));
+        const o = addPointLight({ x: at.x, y: at.y, z: at.z });
+        setSelected(o);
+      });
+
+      importUrlBtn.addEventListener("click", async () => {
+        const url = prompt("Paste a .glb or .gltf URL:");
+        if (!url) return;
+        try {
+          const gltf = await importGLTFfromURL(url);
+          beginPlacementFromGLTF(gltf, { name: "ImportedURL", sourceUrl: url, isLocalFile: false });
+        } catch {
+          alert("Failed to load model (CORS is common). Try importing a local .glb file.");
+        }
+      });
+
+      importFileBtn.addEventListener("click", () => fileInput.click());
+
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        try {
+          const gltf = await importGLTFfromFile(file);
+          beginPlacementFromGLTF(gltf, { name: file.name, sourceUrl: null, isLocalFile: true });
+        } catch {
+          alert("Failed to import file.");
+        } finally {
+          fileInput.value = "";
+        }
+      });
+
+      exportBtn.addEventListener("click", exportScene);
+      loadBtn.addEventListener("click", async () => {
+        try { await loadSceneAsync(jsonArea.value); }
+        catch { alert("Invalid JSON (or model URL failed)."); }
+      });
+
+      refreshPrefabUI();
+
+      // ---------------- Input ----------------
+      const keys = { w:false,a:false,s:false,d:false,shift:false,space:false };
+      addEventListener("keydown", (ev) => {
+        if (ev.code === "Tab") { ev.preventDefault(); setMode(mode === "edit" ? "play" : "edit"); }
+
+        if (ev.code === "KeyH") hitbox.visible = !hitbox.visible;
+
+        if (ev.code === "KeyW") keys.w = true;
+        if (ev.code === "KeyA") keys.a = true;
+        if (ev.code === "KeyS") keys.s = true;
+        if (ev.code === "KeyD") keys.d = true;
+        if (ev.code === "ShiftLeft") keys.shift = true;
+        if (ev.code === "Space") {
+          keys.space = true;
+          jumpBufferTimer = JUMP_BUFFER;
+        }
+
+        if (placing && mode === "edit") {
+          if (ev.code === "KeyQ") placing.yawRad += 0.12;
+          if (ev.code === "KeyE") placing.yawRad -= 0.12;
+          if (ev.code === "Escape") cancelPlacement();
+        }
+
+        if (mode === "edit") {
+          if (!placing) {
+            if (ev.code === "KeyW") { tControls.setMode("translate"); gizmoMode.value = "translate"; }
+            if (ev.code === "KeyE") { tControls.setMode("rotate"); gizmoMode.value = "rotate"; }
+            if (ev.code === "KeyR") { tControls.setMode("scale"); gizmoMode.value = "scale"; }
+            if (ev.code === "KeyQ") {
+              const next = (tControls.space === "world") ? "local" : "world";
+              tControls.setSpace(next);
+              gizmoSpace.value = next;
+            }
+          }
+          if (ev.code === "Delete") {
+            if (selected && selected !== terrain) deleteSelected();
+          }
+          if ((ev.ctrlKey || ev.metaKey) && ev.code === "KeyD") {
+            ev.preventDefault();
+            duplicateSelected();
+          }
+        }
+      });
+
+      addEventListener("keyup", (ev) => {
+        if (ev.code === "KeyW") keys.w = false;
+        if (ev.code === "KeyA") keys.a = false;
+        if (ev.code === "KeyS") keys.s = false;
+        if (ev.code === "KeyD") keys.d = false;
+        if (ev.code === "ShiftLeft") keys.shift = false;
+        if (ev.code === "Space") keys.space = false;
+      });
+
+      renderer.domElement.addEventListener("mousedown", (ev) => {
+        if (ev.button !== 0) return;
+        mouseDown = true;
+
+        if (mode === "play") {
+          pointerLock.lock();
+          return;
+        }
+
+        const path = ev.composedPath?.() ?? [];
+        if (path.includes(ui)) return;
+
+        if (placing) {
+          finalizePlacement();
+          return;
+        }
+
+        if (terrainMode.value === "off" && !tControls.dragging) pickSelect(ev.clientX, ev.clientY);
+      });
+
+      addEventListener("mouseup", () => (mouseDown = false));
+      addEventListener("mousemove", (ev) => { lastMouseX = ev.clientX; lastMouseY = ev.clientY; });
+
+      window.addEventListener("pointermove", (ev) => {
+        if (mode !== "edit") return;
+        if (!placing) return;
+
+        const p = raycastTerrainAtMouse(ev.clientX, ev.clientY);
+        if (!p) return;
+
+        placing.root.position.copy(p);
+        placing.root.position.y += 0.02;
+        placing.root.rotation.set(0, placing.yawRad, 0);
+
+        updateColliderBoxFor(placing.root);
+      }, { passive: true });
+
+      toggleModeBtn.addEventListener("click", () => setMode(mode === "edit" ? "play" : "edit"));
+
+      // ---------------- Main loop ----------------
+      const clock = new THREE.Clock();
+
+      function tick() {
+        requestAnimationFrame(tick);
+        const dt = Math.min(clock.getDelta(), 0.033);
+
+        if (mode === "edit") {
+          orbit.update();
+          updateOutline();
+          paintTerrainIfNeeded();
+
+          if (tControls.dragging) {
+            syncLightHandles();
+            updateAllColliderBoxes();
+          }
+
+          if (placing) placing.root.rotation.set(0, placing.yawRad, 0);
+        } else {
+          resolveTerrainGrounding();
+
+          jumpBufferTimer = Math.max(0, jumpBufferTimer - dt);
+          coyoteTimer = player.grounded ? COYOTE_TIME : Math.max(0, coyoteTimer - dt);
+
+          if (jumpBufferTimer > 0 && coyoteTimer > 0) {
+            player.vel.y = PLAYER.jumpSpeed;
+            player.grounded = false;
+            coyoteTimer = 0;
+            jumpBufferTimer = 0;
+            player.feet.y += 0.001;
+          }
+
+          const { f, r } = forwardRight();
+          const wish = new THREE.Vector3();
+          if (keys.w) wish.add(f);
+          if (keys.s) wish.sub(f);
+          if (keys.d) wish.add(r);
+          if (keys.a) wish.sub(r);
+          if (wish.lengthSq() > 0) wish.normalize();
+
+          player.vel.x += wish.x * PLAYER.accel * dt;
+          player.vel.z += wish.z * PLAYER.accel * dt;
+
+          const fr = player.grounded ? PLAYER.frictionGround : PLAYER.frictionAir;
+          player.vel.x -= player.vel.x * fr * dt;
+          player.vel.z -= player.vel.z * fr * dt;
+
+          const maxSpeed = keys.shift ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
+          const horiz = new THREE.Vector2(player.vel.x, player.vel.z);
+          if (horiz.length() > maxSpeed) {
+            horiz.setLength(maxSpeed);
+            player.vel.x = horiz.x;
+            player.vel.z = horiz.y;
+          }
+
+          player.vel.y += -PLAYER.gravity * dt;
+          moveAndCollide(dt);
+        }
+
+        syncPlayerCameraHitbox();
+        renderer.render(scene, camera);
+      }
+
+      tick();
+
+      addEventListener("resize", () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+      });
+
+      // start
+      setMode("edit");
+      setSelected(null);
+      refreshLists();
+    </script>
+  </body>
+</html>

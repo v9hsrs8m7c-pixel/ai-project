@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D Vector Standardization Simulation</title>
+  <style>
+    html, body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
+    #toggleBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 8px;
+      background: #fff;
+      border: none;
+      z-index: 10;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <button id="toggleBtn">Normalization ON</button>
+  <canvas id="gameCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const map = [
+      "####################",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "#                  #",
+      "####################"
+    ];
+    const tileSize = 64;
+    const fov = Math.PI / 3;
+    const numRays = 240;
+    const maxDepth = 1024;
+    const gravity = 0.5;
+    const jumpStrength = -8;
+
+    let pos = { x: 150, y: 150, z: 0, vz: 0 };
+    let angle = 0;
+    let velocity = { x: 0, y: 0 };
+    let keys = {};
+    let normalizeVectors = true;
+    let onGround = true;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    document.getElementById("toggleBtn").onclick = () => {
+      normalizeVectors = !normalizeVectors;
+      document.getElementById("toggleBtn").innerText = normalizeVectors ? "Normalization ON" : "Normalization OFF";
+    };
+
+    document.addEventListener("keydown", e => {
+      keys[e.key] = true;
+      if (e.key === ' ') {
+        fireWeapon();
+      }
+    });
+    document.addEventListener("keyup", e => keys[e.key] = false);
+
+    function mapCollision(x, y) {
+      const col = Math.floor(x / tileSize);
+      const row = Math.floor(y / tileSize);
+      if (row < 0 || row >= map.length || col < 0 || col >= map[row].length) return true;
+      return map[row][col] === '#';
+    }
+
+    function castRays() {
+      const stripWidth = canvas.width / numRays;
+      for (let i = 0; i < numRays; i++) {
+        const rayAngle = angle - fov / 2 + (i / numRays) * fov;
+        let distance = 0;
+        let hit = false;
+
+        const dx = Math.cos(rayAngle);
+        const dy = Math.sin(rayAngle);
+
+        while (!hit && distance < maxDepth) {
+          distance += 1;
+          const x = pos.x + dx * distance;
+          const y = pos.y + dy * distance;
+
+          if (mapCollision(x, y)) {
+            hit = true;
+          }
+        }
+
+        const correctedDistance = distance * Math.cos(rayAngle - angle);
+        const wallHeight = (tileSize * 300) / correctedDistance;
+        const color = 255 - Math.min(255, correctedDistance / 2);
+        ctx.fillStyle = `rgb(${color},${color},${color})`;
+        ctx.fillRect(i * stripWidth, (canvas.height / 2) - wallHeight / 2 - pos.z, stripWidth + 1, wallHeight);
+      }
+    }
+
+    function update() {
+      let dx = 0, dy = 0;
+
+      if (keys['w']) {
+        dx += Math.cos(angle);
+        dy += Math.sin(angle);
+      }
+      if (keys['s']) {
+        dx -= Math.cos(angle);
+        dy -= Math.sin(angle);
+      }
+      if (keys['a']) {
+        dx += Math.cos(angle - Math.PI / 2);
+        dy += Math.sin(angle - Math.PI / 2);
+      }
+      if (keys['d']) {
+        dx += Math.cos(angle + Math.PI / 2);
+        dy += Math.sin(angle + Math.PI / 2);
+      }
+
+      if (normalizeVectors && (dx !== 0 || dy !== 0)) {
+        const len = Math.hypot(dx, dy);
+        dx /= len;
+        dy /= len;
+      }
+
+      velocity.x += dx * 0.3;
+      velocity.y += dy * 0.3;
+      velocity.x *= 0.9;
+      velocity.y *= 0.9;
+
+      let nextX = pos.x + velocity.x;
+      let nextY = pos.y + velocity.y;
+
+      if (!mapCollision(nextX, pos.y)) pos.x = nextX;
+      else velocity.x = 0;
+
+      if (!mapCollision(pos.x, nextY)) pos.y = nextY;
+      else velocity.y = 0;
+
+      if (keys[' ']) {
+        if (onGround) {
+          pos.vz = jumpStrength;
+          onGround = false;
+        }
+      }
+
+      pos.vz += gravity;
+      pos.z += pos.vz;
+      if (pos.z > 0) {
+        pos.z = 0;
+        pos.vz = 0;
+        onGround = true;
+      }
+
+      if (keys['ArrowLeft']) angle -= 0.03;
+      if (keys['ArrowRight']) angle += 0.03;
+    }
+
+    function drawMinimap() {
+      const scale = 0.2;
+      const miniSize = tileSize * scale;
+
+      for (let row = 0; row < map.length; row++) {
+        for (let col = 0; col < map[row].length; col++) {
+          const cell = map[row][col];
+          ctx.fillStyle = cell === '#' ? '#999' : '#111';
+          ctx.fillRect(col * miniSize, row * miniSize, miniSize, miniSize);
+        }
+      }
+
+      const px = pos.x * scale;
+      const py = pos.y * scale;
+      const dx = Math.cos(angle) * 10;
+      const dy = Math.sin(angle) * 10;
+
+      ctx.fillStyle = '#0f0';
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#0f0';
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + dx, py + dy);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(px + dx, py + dy);
+      ctx.lineTo(px + dx - dy * 0.5, py + dy + dx * 0.5);
+      ctx.lineTo(px + dx + dy * 0.5, py + dy - dx * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function draw() {
+      ctx.fillStyle = '#000033';
+      ctx.fillRect(0, 0, canvas.width, canvas.height / 2); // sky
+      ctx.fillStyle = '#222';
+      ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2); // ground
+
+      castRays();
+      drawMinimap();
+
+      ctx.fillStyle = '#0f0';
+      ctx.font = '14px monospace';
+      const speed = Math.hypot(velocity.x, velocity.y).toFixed(2);
+      ctx.fillText(`Speed: ${speed}`, 10, canvas.height - 30);
+      ctx.fillText(`Normalization: ${normalizeVectors ? 'ON' : 'OFF'}`, 10, canvas.height - 10);
+    }
+
+    function loop() {
+      resizeCanvas();
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>

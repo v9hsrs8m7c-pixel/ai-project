@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Next-Button Predictor — Focus Mode + AI Ensemble</title>
+<style>
+  :root { --bg:#0f172a; --card:#111827; --ink:#e5e7eb; --muted:#9ca3af; --accent:#22d3ee; --good:#22c55e; --bad:#ef4444; }
+  html,body { height:100%; background:var(--bg); color:var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, InterVariable, "Helvetica Neue", Arial, "Noto Sans"; }
+  .wrap { max-width: 920px; margin: 24px auto; padding: 16px; }
+  .card { background: linear-gradient(180deg, #0b1223, var(--card)); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  h1 { margin: 0 0 8px; font-size: 24px; letter-spacing: .2px; }
+  .row { display:flex; gap:16px; align-items:stretch; flex-wrap: wrap; }
+  .col { flex:1 1 260px; }
+  .big { font-size: 17px; }
+  .btnpad { display:flex; gap:16px; }
+  button { cursor: pointer; border: 1px solid #1f2937; background:#0b1223; color:var(--ink); border-radius: 14px; padding:18px 22px; font-weight: 700; font-size: 18px; flex:1; transition: transform .02s ease, background .2s ease, border-color .2s ease; }
+  button:hover { background:#0e1730; }
+  button:active { transform: scale(.99); }
+  .a { border-color:#334155; }
+  .b { border-color:#334155; }
+  .predict { padding: 14px 16px; border:1px dashed #334155; border-radius: 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .tag { padding:6px 10px; border-radius:999px; font-weight:800; letter-spacing:.2px; }
+  .tag.predA { background:rgba(34,211,238,.12); color:#67e8f9; border:1px solid rgba(34,211,238,.35); }
+  .tag.predB { background:rgba(99,102,241,.12); color:#a5b4fc; border:1px solid rgba(99,102,241,.35); }
+  .prob { font-variant-numeric: tabular-nums; }
+  .statgrid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; }
+  .stat { background:#0b1223; border:1px solid #1f2937; border-radius:14px; padding:10px 12px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .rowline { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .tiny { font-size:12px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  details { border:1px solid #1f2937; border-radius:14px; padding:10px 12px; }
+  summary { cursor:pointer; font-weight:700; }
+  .hist { display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; }
+  .pill { border:1px solid #1f2937; border-radius: 999px; padding:2px 8px; font-weight:700; }
+  .pill.a { color:#67e8f9; border-color: rgba(34,211,238,.35); }
+  .pill.b { color:#a5b4fc; border-color: rgba(99,102,241,.35); }
+  .sep { height:1px; background:#1f2937; margin:12px 0; }
+  .slider { width: 180px; }
+  .linky { color: var(--accent); text-decoration: none; border-bottom: 1px dashed rgba(34,211,238,.4); }
+
+  /* ===== Focus Mode ===== */
+  body.focus .nonfocus { display:none !important; }     /* hide everything marked nonfocus */
+  body.focus .predict .prob { display:none !important; }/* hide probabilities specifically */
+  body.focus .predict { border-style: solid; }          /* slightly stronger frame */
+  body.focus .wrap { max-width: 700px; }                /* tighter layout */
+  body.focus .btnpad button { font-size: 22px; padding: 22px 26px; } /* bigger buttons */
+  #focusBar { display:flex; justify-content:space-between; align-items:center; margin:8px 0 16px; }
+  #focusHint { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div id="focusBar">
+      <h1>Next-Button Predictor</h1>
+      <div class="rowline">
+        <button id="toggleFocus" title="Switch between Focus and Full modes">Enter Focus Mode</button>
+      </div>
+    </div>
+
+    <p class="big nonfocus">Press <strong>F</strong> or <strong>J</strong>. The model predicts your next press and learns online.
+    </p>
+
+    <div class="row" style="margin:14px 0;">
+      <div class="col">
+        <div class="predict" id="predictBox">
+          <div id="focusCounts" aria-live="polite">Clicks: <span id="stTotal">0</span>
+        </div>
+          <div>
+            <div class="muted tiny nonfocus">Current prediction</div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <span id="predTag" class="tag">—</span>
+              <span class="prob mono" id="probText">p(A)=0.500, p(B)=0.500</span>
+            </div>
+          </div>
+          <div class="tiny muted nonfocus">Updated after each press</div>
+        </div>
+      </div>
+      <div class="col nonfocus">
+        <div class="statgrid">
+          <div class="stat">
+            <div class="muted tiny">Total presses</div>
+            <div id="stTotal" class="mono">0</div>
+          </div>
+          <div class="stat">
+            <div class="muted tiny">Correct predictions</div>
+            <div id="stCorrect" class="mono">0</div>
+          </div>
+          <div class="stat">
+            <div class="muted tiny">Accuracy</div>
+            <div id="stAcc" class="mono">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btnpad">
+      <button class="a" id="btnA" aria-label="Press F">Press F</button>
+      <button class="b" id="btnB" aria-label="Press J">Press J</button>
+    </div>
+
+    <div class="row nonfocus" style="margin-top:14px;">
+      <div class="col">
+        <div class="rowline">
+          <button id="btnReset" title="Clear history & learning">Reset</button>
+          <button id="btnUndo" title="Undo last press">Undo</button>
+          <button id="btnRandom" title="Feed random inputs to verify ~50%">Random test (1000)</button>
+          <label class="tiny"><input type="checkbox" id="persistChk" checked /> Persist to localStorage</label>
+        </div>
+        <div class="tiny" style="margin-top:8px; display:grid; grid-template-columns: 1fr auto; gap:6px 12px;">
+          <span>Learning rate (eta)</span><input id="eta" type="range" min="0.05" max="1.0" step="0.05" value="0.3" class="slider" />
+          <span>Decay (recency weight)</span><input id="decay" type="range" min="0.90" max="1.00" step="0.005" value="0.98" class="slider" />
+          <span>Max history (for n-grams)</span><input id="maxN" type="range" min="50" max="1000" step="50" value="300" class="slider" />
+        </div>
+      </div>
+      <div class="col">
+        <details>
+          <summary>Show recent history</summary>
+          <div class="hist" id="historyPills"></div>
+          <div class="sep"></div>
+          <div class="tiny muted">Legend: <span class="pill a">F</span> <span class="pill b">J</span>.
+            Accuracy is computed vs. the app’s prediction <em>before</em> each press.</div>
+        </details>
+      </div>
+    </div>
+
+    <div class="sep nonfocus"></div>
+    <details class="nonfocus">
+      <summary>How it works (real AI ensemble)</summary>
+      <p class="tiny">
+        The predictor combines multiple specialized “experts” (EWMA frequency, 1st/2nd/3rd-order n-grams with backoff,
+        alternation and run-length detectors) using
+        <a class="linky" href="https://en.wikipedia.org/wiki/Multiplicative_weights_update_method" target="_blank" rel="noopener">Multiplicative Weights</a>.
+        Experts output probabilities; the combiner creates a log-opinion pool and updates weights by log-loss.
+        On random inputs accuracy stays ~50%; on human inputs, patterns emerge and accuracy climbs >50%.
+      </p>
+    </details>
+    <div id="focusHint" class="nonfocus">Tip: Use “Enter Focus Mode” to hide everything but the buttons and the AI’s current guess.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ---------- Utilities ----------
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const eps = 1e-9;
+  const KEY = 'nbp_state_v2';
+
+  // ---------- Expert base ----------
+  class Expert {
+    constructor(name){ this.name = name; this.reset(); }
+    reset(){}
+    predict(){ return { pA: 0.5, info: "" }; }
+    update(_sym){}
+  }
+
+  // EWMA frequency expert
+  class EwmaFreq extends Expert {
+    constructor(alpha=0.98){ super('EWMA-Freq'); this.alpha0=alpha; this.reset(); }
+    reset(){ this.alpha=this.alpha0; this.wA=1; this.wB=1; }
+    predict(){ const pA = this.wA/(this.wA+this.wB); return { pA, info:'' }; }
+    update(sym){ this.wA*=this.alpha; this.wB*=this.alpha; if(sym==='A') this.wA+=1; else this.wB+=1; }
+  }
+  // 1st-order Markov expert
+  class Markov1 extends Expert {
+    constructor(alpha=0.985){ super('Markov-1'); this.alpha0=alpha; this.reset(); }
+    reset(){ this.alpha=this.alpha0; this.counts={A:{A:1,B:1}, B:{A:1,B:1}}; this.prev=null; }
+    predict(history){ const prev=history.at(-1); if(!prev) return { pA:0.5, info:'' }; const c=this.counts[prev]; return { pA: c.A/(c.A+c.B), info:'' }; }
+    update(sym){ if(this.prev){ for(const p of ['A','B']){ this.counts[p].A*=this.alpha; this.counts[p].B*=this.alpha; } this.counts[this.prev][sym]+=1; } this.prev=sym; }
+  }
+  // Variable-order PPM-ish expert (orders 0..3)
+  class PPM extends Expert {
+    constructor(alpha=0.99, maxOrder=3, maxHist=300){ super('PPM-o3'); this.alpha0=alpha; this.maxOrder=maxOrder; this.maxHist=maxHist; this.reset(); }
+    reset(){ this.alpha=this.alpha0; this.ng=new Map(); this.hist=[]; }
+    _key(ctx){ return ctx.join(''); }
+    _getCounts(ctx){ const key=this._key(ctx); if(!this.ng.has(key)) this.ng.set(key,{A:1,B:1}); return this.ng.get(key); }
+    predict(history){
+      let pA=0, totalW=0;
+      for(let k=this.maxOrder;k>=0;k--){
+        const ctx=history.slice(-k);
+        const c=this._getCounts(ctx);
+        const p=c.A/(c.A+c.B);
+        const w=Math.pow(0.6, this.maxOrder-k);
+        pA+=w*p; totalW+=w;
+      }
+      return { pA: pA/totalW, info:'' };
+    }
+    update(sym){
+      const h=this.hist, ctxs=[];
+      for(let k=0;k<=this.maxOrder;k++) ctxs.push(h.slice(-k));
+      ctxs.forEach(ctx=>{ const c=this._getCounts(ctx); c.A*=this.alpha; c.B*=this.alpha; });
+      ctxs.forEach(ctx=>{ const c=this._getCounts(ctx); c[sym]+=1; });
+      h.push(sym); if(h.length>this.maxHist) h.shift();
+    }
+  }
+  // Alternation detector
+  class Alternator extends Expert {
+    constructor(){ super('Alternator'); this.reset(); }
+    reset(){ this.hist=[]; }
+    predict(history){
+      if(history.length<2) return { pA:0.5, info:'' };
+      let score=0;
+      for(let i=2;i<=Math.min(6,history.length);i++){
+        if(history.at(-i)!==history.at(-(i-1))) score++; else break;
+      }
+      const conf = Math.min(0.1 + 0.15*score, 0.85);
+      const last=history.at(-1);
+      const guessA = (last==='B');
+      const pA = guessA ? (0.5+conf/2) : (0.5-conf/2);
+      return { pA, info:'' };
+    }
+    update(sym){ this.hist.push(sym); if(this.hist.length>64) this.hist.shift(); }
+  }
+  // Run-length / stickiness detector
+  class RunLength extends Expert {
+    constructor(){ super('Run-Length'); this.reset(); }
+    reset(){ this.run=0; this.last=null; this.bias=0; }
+    predict(){
+      if(this.last==null) return { pA:0.5, info:'' };
+      const stayFav = this.bias >= 0;
+      const conf = Math.min(Math.abs(this.bias), 0.8) * 0.5 + Math.min(this.run*0.04, 0.3);
+      const nextSame = stayFav;
+      const pA = nextSame ? (this.last==='A' ? 0.5+conf/2 : 0.5-conf/2)
+                          : (this.last==='A' ? 0.5-conf/2 : 0.5+conf/2);
+      return { pA, info:'' };
+    }
+    update(sym){
+      if(this.last===sym) this.run++; else this.run=1;
+      const stayed = (this.last!==null && this.last===sym);
+      this.bias = 0.95*this.bias + (stayed? +0.2 : -0.2);
+      this.last = sym;
+    }
+  }
+
+  // ---------- Combiner (Multiplicative Weights) ----------
+  class HedgeCombiner {
+    constructor(experts, eta=0.3){ this.experts=experts; this.w=experts.map(()=>1); this.eta=eta; this.history=[]; this.total=0; this.correct=0; this.maxHist=300; }
+    setEta(eta){ this.eta=eta; }
+    setMaxHist(n){ this.maxHist=n; }
+    predict(){
+      const preds=this.experts.map(e=>e.predict(this.history).pA);
+      let logOdds=0, sumW=0;
+      for(let i=0;i<preds.length;i++){
+        const p=clamp(preds[i], eps, 1-eps);
+        logOdds += this.w[i]*Math.log(p/(1-p)); sumW += this.w[i];
+      }
+      if(sumW===0) return { pA:0.5, experts: preds };
+      const pA = 1/(1+Math.exp(-logOdds/sumW));
+      return { pA, experts: preds };
+    }
+    update(actual){
+      const { pA, experts } = this.predict();
+      const guess = pA>=0.5 ? 'A' : 'B';
+      this.total++; if(guess===actual) this.correct++;
+      for(let i=0;i<this.experts.length;i++){
+        const p=clamp(experts[i], eps, 1-eps);
+        const loss = (actual==='A') ? -Math.log(p) : -Math.log(1-p);
+        this.w[i] *= Math.exp(-this.eta * loss);
+      }
+      const s=this.w.reduce((a,b)=>a+b,0) || eps;
+      for(let i=0;i<this.w.length;i++) this.w[i] /= s;
+      this.experts.forEach(e=>e.update(actual));
+      this.history.push(actual); if(this.history.length>this.maxHist) this.history.shift();
+      return { pA, guess };
+    }
+    accuracy(){ return this.total ? this.correct/this.total : 0; }
+    reset(){ this.w=this.experts.map(()=>1); this.history=[]; this.total=0; this.correct=0; this.experts.forEach(e=>e.reset()); }
+  }
+
+  // ---------- App State & DOM ----------
+  const state = { persist: true };
+  const predTag   = document.getElementById('predTag');
+  const probText  = document.getElementById('probText');
+  const stTotal   = document.getElementById('stTotal');
+  const stCorrect = document.getElementById('stCorrect');
+  const stAcc     = document.getElementById('stAcc');
+  const histPills = document.getElementById('historyPills');
+  const btnA = document.getElementById('btnA');
+  const btnB = document.getElementById('btnB');
+  const btnReset = document.getElementById('btnReset');
+  const btnUndo = document.getElementById('btnUndo');
+  const btnRandom = document.getElementById('btnRandom');
+  const persistChk = document.getElementById('persistChk');
+  const etaInp = document.getElementById('eta');
+  const decayInp = document.getElementById('decay');
+  const maxNInp = document.getElementById('maxN');
+  const toggleFocusBtn = document.getElementById('toggleFocus');
+
+  function makeModel(){
+    const e1 = new EwmaFreq(parseFloat(decayInp?.value || 0.98));
+    const e2 = new Markov1(0.985);
+    const e3 = new PPM(0.99, 3, parseInt(maxNInp?.value || 300,10));
+    const e4 = new Alternator();
+    const e5 = new RunLength();
+    const comb = new HedgeCombiner([e1,e2,e3,e4,e5], parseFloat(etaInp?.value || 0.3));
+    comb.setMaxHist(parseInt(maxNInp?.value || 300,10));
+    return comb;
+  }
+
+  let model = makeModel();
+
+  // ---------- Persistence ----------
+  function save(){
+    if(!state.persist) return;
+    const ser = {
+      hist: model.history, total: model.total, correct: model.correct, w: model.w,
+      e1: { wA: model.experts[0].wA, wB: model.experts[0].wB, alpha: model.experts[0].alpha },
+      e2: { counts: model.experts[1].counts, prev: model.experts[1].prev, alpha: model.experts[1].alpha },
+      e3: { ng: Array.from(model.experts[2].ng.entries()), hist: model.experts[2].hist, alpha: model.experts[2].alpha, maxOrder: model.experts[2].maxOrder, maxHist: model.experts[2].maxHist },
+      e4: { hist: model.experts[3].hist },
+      e5: { run: model.experts[4].run, last: model.experts[4].last, bias: model.experts[4].bias },
+      eta: model.eta, maxHist: model.maxHist,
+      ui: { persist: state.persist, eta: etaInp?.value, decay: decayInp?.value, maxN: maxNInp?.value, focus: document.body.classList.contains('focus') }
+    };
+    localStorage.setItem(KEY, JSON.stringify(ser));
+  }
+  function load(){
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(!raw) return;
+      const s = JSON.parse(raw);
+      model.reset();
+      model.history = s.hist || [];
+      model.total = s.total || 0;
+      model.correct = s.correct || 0;
+      model.w = s.w || model.w;
+      const e1 = model.experts[0]; e1.wA = s.e1?.wA ?? 1; e1.wB = s.e1?.wB ?? 1; e1.alpha = s.e1?.alpha ?? e1.alpha0;
+      const e2 = model.experts[1]; e2.counts = s.e2?.counts ?? e2.counts; e2.prev = s.e2?.prev ?? null; e2.alpha = s.e2?.alpha ?? e2.alpha0;
+      const e3 = model.experts[2]; e3.ng = new Map(s.e3?.ng ?? []); e3.hist = s.e3?.hist ?? []; e3.alpha = s.e3?.alpha ?? e3.alpha0; e3.maxOrder = s.e3?.maxOrder ?? e3.maxOrder; e3.maxHist = s.e3?.maxHist ?? e3.maxHist;
+      const e4 = model.experts[3]; e4.hist = s.e4?.hist ?? [];
+      const e5 = model.experts[4]; e5.run = s.e5?.run ?? 0; e5.last = s.e5?.last ?? null; e5.bias = s.e5?.bias ?? 0;
+      if(s.eta) { model.setEta(s.eta); etaInp && (etaInp.value = String(s.eta)); }
+      if(s.maxHist){ model.setMaxHist(s.maxHist); maxNInp && (maxNInp.value = String(s.maxHist)); }
+      if(s.ui){
+        persistChk && (persistChk.checked = !!s.ui.persist);
+        state.persist = !!s.ui.persist;
+        etaInp && (etaInp.value = s.ui.eta);
+        decayInp && (decayInp.value = s.ui.decay);
+        maxNInp && (maxNInp.value = s.ui.maxN);
+        if(s.ui.focus) enterFocusMode(true);
+      }
+    }catch(e){ console.warn('Load failed', e); }
+  }
+
+  // ---------- UI ----------
+  function refreshUI(){
+    const { pA } = model.predict();
+    predTag.textContent = pA>=0.5 ? 'Predict: F' : 'Predict: J';
+    predTag.className = 'tag ' + (pA>=0.5 ? 'predA' : 'predB');
+    // Probability text is auto-hidden in focus mode via CSS
+    document.getElementById('probText').textContent = `p(F)=${pA.toFixed(3)}, p(J)=${(1-pA).toFixed(3)}`;
+
+    stTotal && (stTotal.textContent = String(model.total));
+    stCorrect && (stCorrect.textContent = String(model.correct));
+    stAcc && (stAcc.textContent = model.total ? ( (model.correct/model.total*100).toFixed(1) + '%' ) : '—');
+
+    // History pills (last 60)
+    if(histPills){
+      histPills.innerHTML = '';
+      for(const c of model.history.slice(-60)){
+        const span = document.createElement('span');
+        span.className = 'pill ' + (c==='A' ? 'a' : 'b');
+        span.textContent = c;
+        histPills.appendChild(span);
+      }
+    }
+  }
+
+  function press(symbol){
+    model.update(symbol);
+    save();
+    refreshUI();
+  }
+
+  function undo(){
+    if(model.history.length===0) return;
+    const seq = model.history.slice(0,-1);
+    const totalOld = model.total, correctOld = model.correct;
+    model = makeModel();
+    for(const s of seq) model.update(s);
+    model.total = totalOld - 1 >= 0 ? totalOld - 1 : 0;
+    model.correct = Math.min(model.correct, model.total);
+    save(); refreshUI();
+  }
+
+  function resetAll(){
+    model.reset();
+    localStorage.removeItem(KEY);
+    refreshUI();
+  }
+
+  async function randomTest(N=1000){
+    const backup = localStorage.getItem(KEY);
+    const oldModel = model;
+    model = makeModel();
+    model.reset();
+    let correct=0;
+    for(let i=0;i<N;i++){
+      const { pA } = model.predict();
+      const guess = pA>=0.5 ? 'A' : 'B';
+      const sym = (Math.random()<0.5) ? 'A' : 'B';
+      if(guess===sym) correct++;
+      model.update(sym);
+    }
+    alert(`Random test on ${N} flips:\nAccuracy = ${(correct/N*100).toFixed(2)}% (should be near 50%)`);
+    model = oldModel;
+    if(backup) localStorage.setItem(KEY, backup);
+    refreshUI();
+  }
+
+  // ---------- Focus Mode ----------
+  function enterFocusMode(skipSave=false){
+    document.body.classList.add('focus');
+    toggleFocusBtn.textContent = 'Exit Focus Mode';
+    if(!skipSave) save();
+  }
+  function exitFocusMode(skipSave=false){
+    document.body.classList.remove('focus');
+    toggleFocusBtn.textContent = 'Enter Focus Mode';
+    if(!skipSave) save();
+  }
+  function toggleFocus(){
+    if(document.body.classList.contains('focus')) exitFocusMode();
+    else enterFocusMode();
+  }
+
+  // ---------- Event wiring ----------
+  btnA.addEventListener('click', ()=>press('A'));
+  btnB.addEventListener('click', ()=>press('B'));
+  btnReset?.addEventListener('click', resetAll);
+  btnUndo?.addEventListener('click', undo);
+  btnRandom?.addEventListener('click', ()=>randomTest(1000));
+  persistChk?.addEventListener('change', ()=>{ state.persist = persistChk.checked; if(!state.persist) localStorage.removeItem(KEY); else save(); });
+  etaInp?.addEventListener('input', ()=>{ model.setEta(parseFloat(etaInp.value)); save(); refreshUI(); });
+  decayInp?.addEventListener('input', ()=>{
+    const seq = model.history.slice(); const T=model.total, C=model.correct;
+    model = makeModel(); for(const s of seq) model.update(s); model.total=T; model.correct=C; save(); refreshUI();
+  });
+  maxNInp?.addEventListener('input', ()=>{
+    const seq = model.history.slice(); const T=model.total, C=model.correct;
+    model = makeModel(); for(const s of seq) model.update(s); model.total=T; model.correct=C; save(); refreshUI();
+  });
+  toggleFocusBtn.addEventListener('click', toggleFocus);
+
+  // Keyboard shortcuts: F → A, J → B (also respect uppercase)
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); press('A'); }
+    if (e.key === 'j' || e.key === 'J') { e.preventDefault(); press('B'); }
+    // Quick toggle focus with `\` (optional)
+    if (e.key === '\\') { e.preventDefault(); toggleFocus(); }
+  });
+
+  // ---------- Init ----------
+  load();
+  refreshUI();
+})();
+</script>
+</body>
+</html>

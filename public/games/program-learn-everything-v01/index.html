@@ -1,0 +1,514 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Everything Learner</title>
+  <style>
+    :root{
+      --bg:#0b1020;--panel:#121a2f;--panel-2:#0e1528;--text:#e9eefb;--muted:#9fb0d9;--primary:#6ea8fe;--accent:#7ef0c5;--danger:#ff6b6b;--warn:#ffd166;--ok:#95d47b;
+      --shadow:0 10px 25px rgba(0,0,0,.35);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; color:var(--text); background:linear-gradient(180deg,#0b0f1e 0%,#0a1330 100%);}    
+    a{color:var(--primary); text-decoration:none}
+    a:hover{text-decoration:underline}
+    header{position:sticky; top:0; z-index:50; backdrop-filter:saturate(140%) blur(10px); background:rgba(10,18,40,.65); border-bottom:1px solid rgba(255,255,255,.06)}
+    .wrap{max-width:1200px; margin:0 auto; padding:18px}
+    .brand{display:flex; gap:12px; align-items:center}
+    .logo{width:34px;height:34px;border-radius:10px;background:conic-gradient(from 180deg,var(--primary),var(--accent),#9d7bff,var(--primary)); box-shadow:0 6px 18px rgba(110,168,254,.36)}
+    .title{font-weight:800; letter-spacing:.3px}
+    .grid{display:grid; grid-template-columns:260px 1fr; gap:16px; padding:18px; max-width:1200px; margin:0 auto}
+    nav{position:sticky; top:74px; align-self:start; background:var(--panel); padding:14px; border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid rgba(255,255,255,.06)}
+    nav h3{margin:8px 8px 12px; font-size:14px; color:var(--muted); font-weight:600}
+    .navbtn{display:flex; align-items:center; gap:10px; width:100%; padding:10px 12px; border-radius:12px; border:1px solid transparent; background:transparent; color:var(--text); text-align:left; cursor:pointer}
+    .navbtn:hover{background:var(--panel-2); border-color:rgba(255,255,255,.06)}
+    .navbtn.active{background:linear-gradient(180deg, rgba(126,240,197,.08), rgba(110,168,254,.08)); border-color:rgba(255,255,255,.12)}
+    main{min-height:60vh}
+    section{display:none}
+    section.active{display:block}.card{background:var(--panel); border:1px solid rgba(255,255,255,.06); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow)}
+.row{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+.row-3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px}
+.pill{display:inline-flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid rgba(255,255,255,.06); padding:6px 10px; border-radius:30px; font-size:12px; color:var(--muted)}
+input, select, textarea{width:100%; background:#0c142b; border:1px solid rgba(255,255,255,.12); color:var(--text); padding:10px 12px; border-radius:12px; outline:0}
+textarea{min-height:120px; resize:vertical}
+label{font-size:13px; color:var(--muted); margin-bottom:6px; display:block}
+.btn{display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; border:1px solid transparent; cursor:pointer; color:#091022; font-weight:700}
+.btn.primary{background:var(--primary)}
+.btn.accent{background:var(--accent)}
+.btn.ghost{background:transparent; color:var(--text); border-color:rgba(255,255,255,.18)}
+.btn.warn{background:var(--warn)}
+.btn.danger{background:var(--danger)}
+.btn.ok{background:var(--ok)}
+.chips{display:flex; flex-wrap:wrap; gap:8px}
+.chip{background:var(--panel-2); border:1px solid rgba(255,255,255,.06); border-radius:999px; padding:6px 10px; font-size:12px}
+.list{display:grid; gap:10px}
+.item{background:var(--panel-2); border:1px solid rgba(255,255,255,.06); padding:12px; border-radius:12px}
+.flex{display:flex; align-items:center; gap:12px}
+.right{margin-left:auto}
+.small{font-size:12px; color:var(--muted)}
+.kbd{background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2); padding:2px 6px; border-radius:6px; font-size:12px}
+.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+
+@media (max-width: 900px){ .grid{grid-template-columns:1fr} nav{position:static} .row, .row-3{grid-template-columns:1fr} }
+
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap flex">
+      <div class="brand"><div class="logo" aria-hidden="true"></div><div>
+        <div class="title">Everything Learner</div>
+        <div class="small">A single-file learning OS: explore → plan → practice → track</div>
+      </div></div>
+      <div class="right small">Hotkeys: <span class="kbd">1</span>-<span class="kbd">7</span> to switch tabs • <span class="kbd">/</span> to search</div>
+    </div>
+  </header>  <div class="grid">
+    <nav>
+      <h3>Navigate</h3>
+      <div class="list" role="tablist" aria-label="Sections">
+        <button class="navbtn active" data-tab="explore" role="tab" aria-selected="true"><span>1</span> Explore a Topic</button>
+        <button class="navbtn" data-tab="planner" role="tab"><span>2</span> Learning Planner</button>
+        <button class="navbtn" data-tab="flash" role="tab"><span>3</span> Flashcards (SRS)</button>
+        <button class="navbtn" data-tab="quiz" role="tab"><span>4</span> Quick Quiz</button>
+        <button class="navbtn" data-tab="timer" role="tab"><span>5</span> Focus Timer</button>
+        <button class="navbtn" data-tab="notes" role="tab"><span>6</span> Notes & Ideas</button>
+        <button class="navbtn" data-tab="progress" role="tab"><span>7</span> Progress</button>
+      </div>
+    </nav><main>
+  <!-- Explore -->
+  <section id="explore" class="active" aria-labelledby="Explore a Topic">
+    <div class="card">
+      <h2>Explore a Topic</h2>
+      <p class="small">Type <span class="kbd">/</span> then your topic. Pulls a short summary & related concepts from Wikipedia. Save items to your plan or generate draft flashcards.</p>
+      <div class="row">
+        <div>
+          <label for="topic">Topic</label>
+          <input id="topic" placeholder="e.g., Linear Algebra, The Roman Empire, Photosynthesis, Docker" />
+        </div>
+        <div class="flex">
+          <button class="btn primary" id="searchBtn">Search</button>
+          <button class="btn ghost" id="luckyBtn" title="I'm curious">I'm Curious</button>
+          <span class="small" id="exploreStatus"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="card" id="summaryCard">
+        <h3>Summary</h3>
+        <div id="summary">Type a topic and press Search.</div>
+        <div class="chips" id="summaryActions" style="margin-top:10px; display:none">
+          <button class="btn accent" id="addToPlan">Add to Plan</button>
+          <button class="btn ok" id="makeCards">Draft Flashcards</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Related concepts</h3>
+        <div id="related" class="list small"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Planner -->
+  <section id="planner">
+    <div class="card">
+      <h2>Learning Planner</h2>
+      <p class="small">Set your goal and daily time. The planner schedules milestone checkpoints and daily sessions. Everything is saved locally (no accounts).</p>
+      <div class="row-3">
+        <div>
+          <label>Focus area</label>
+          <input id="planTopic" placeholder="What are you mastering?" />
+        </div>
+        <div>
+          <label>Daily minutes</label>
+          <input id="planMinutes" type="number" min="5" value="30" />
+        </div>
+        <div>
+          <label>Difficulty</label>
+          <select id="planLevel">
+            <option value="beginner">Beginner</option>
+            <option value="intermediate" selected>Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex" style="margin-top:12px">
+        <button class="btn primary" id="buildPlan">Build Plan</button>
+        <button class="btn ghost" id="exportPlan">Export (.json)</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none" />
+        <button class="btn ghost" id="importPlan">Import</button>
+        <div class="right small" id="planStatus"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Milestones</h3>
+      <div id="milestones" class="list"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Daily Sessions</h3>
+      <div id="sessions" class="list"></div>
+    </div>
+  </section>
+
+  <!-- Flashcards -->
+  <section id="flash">
+    <div class="card">
+      <h2>Flashcards (Spaced Repetition)</h2>
+      <p class="small">Create cards or generate drafts from the Explore tab. Reviews are scheduled with a lightweight SM‑2 algorithm. Ratings: 1 (Again) → 5 (Easy).</p>
+      <div class="row">
+        <div>
+          <label>Front</label>
+          <input id="fcFront" placeholder="Question / prompt" />
+        </div>
+        <div>
+          <label>Back</label>
+          <input id="fcBack" placeholder="Answer / explanation" />
+        </div>
+      </div>
+      <div class="flex" style="margin-top:10px">
+        <button class="btn ok" id="addCard">Add Card</button>
+        <button class="btn ghost" id="exportCards">Export (.json)</button>
+        <input id="importCardsFile" type="file" accept="application/json" style="display:none" />
+        <button class="btn ghost" id="importCards">Import</button>
+        <span class="right small" id="fcStatus"></span>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="card">
+        <h3>Review</h3>
+        <div id="reviewArea" class="item">
+          <div class="small" id="dueCount">0 due</div>
+          <div id="reviewFront" style="font-size:18px; margin:10px 0">No card due. Add cards or wait until due time.</div>
+          <div id="reviewBack" class="small" style="display:none"></div>
+          <div class="flex" style="margin-top:10px">
+            <button class="btn primary" id="showAnswer">Show Answer</button>
+            <div class="right" id="gradeBtns" style="display:none">
+              <button class="btn danger" data-q="1">1 Again</button>
+              <button class="btn warn" data-q="2">2 Hard</button>
+              <button class="btn ghost" data-q="3">3 Okay</button>
+              <button class="btn ok" data-q="4">4 Good</button>
+              <button class="btn accent" data-q="5">5 Easy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Your Deck</h3>
+        <div id="deck" class="list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quiz -->
+  <section id="quiz">
+    <div class="card">
+      <h2>Quick Quiz</h2>
+      <p class="small">Auto-generates 5 multiple‑choice questions from your flashcards. Tip: add concise facts to get sharp questions.</p>
+      <button class="btn primary" id="makeQuiz">Generate Quiz</button>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div id="quizArea" class="list"></div>
+    </div>
+  </section>
+
+  <!-- Timer -->
+  <section id="timer">
+    <div class="card">
+      <h2>Focus Timer</h2>
+      <p class="small">Pomodoro‑style: 25m focus, 5m break by default. Adjust as needed.</p>
+      <div class="row-3">
+        <div><label>Focus (min)</label><input id="focusLen" type="number" min="1" value="25"></div>
+        <div><label>Break (min)</label><input id="breakLen" type="number" min="1" value="5"></div>
+        <div class="flex"><button class="btn primary" id="startTimer">Start</button><button class="btn ghost" id="resetTimer">Reset</button><span class="right pill" id="timerStatus">Ready</span></div>
+      </div>
+      <div class="item" style="margin-top:12px; text-align:center; font-size:42px; font-weight:800" id="timerDisplay">25:00</div>
+    </div>
+  </section>
+
+  <!-- Notes -->
+  <section id="notes">
+    <div class="card">
+      <h2>Notes & Ideas</h2>
+      <p class="small">A lightweight scratchpad saved locally. Use <span class="kbd">Ctrl/Cmd+S</span> to save.</p>
+      <textarea id="notesArea" placeholder="Capture insights, project ideas, TODOs..."></textarea>
+      <div class="flex" style="margin-top:10px">
+        <button class="btn ok" id="saveNotes">Save</button>
+        <button class="btn ghost" id="clearNotes">Clear</button>
+        <span class="right small" id="notesStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Progress -->
+  <section id="progress">
+    <div class="card">
+      <h2>Progress</h2>
+      <div class="row">
+        <div class="item"><div class="small">Total study minutes</div><div id="statMinutes" style="font-size:28px;font-weight:800">0</div></div>
+        <div class="item"><div class="small">Cards in deck</div><div id="statCards" style="font-size:28px;font-weight:800">0</div></div>
+        <div class="item"><div class="small">Cards due now</div><div id="statDue" style="font-size:28px;font-weight:800">0</div></div>
+        <div class="item"><div class="small">Streak (days)</div><div id="statStreak" style="font-size:28px;font-weight:800">0</div></div>
+      </div>
+      <div class="small" style="margin-top:12px">Tip: run the Focus Timer; minutes add to your stats and streak.</div>
+    </div>
+  </section>
+
+</main>
+
+  </div>  <footer class="wrap small" style="opacity:.7">Built for ambition. Your data stays in your browser via <span class="mono">localStorage</span>. Keyboard: <span class="kbd">1–7</span> tabs, <span class="kbd">/</span> search, <span class="kbd">Ctrl/Cmd+S</span> save notes.</footer>  <script>
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+    const store = {
+      get(k, fallback){ try{ return JSON.parse(localStorage.getItem(k)) ?? fallback }catch{ return fallback } },
+      set(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
+    };
+
+    // --- Navigation & hotkeys ---
+    const tabs = ["explore","planner","flash","quiz","timer","notes","progress"];
+    function show(tab){
+      $$("section").forEach(s=>s.classList.remove("active"));
+      $(`#${tab}`).classList.add("active");
+      $$(".navbtn").forEach(b=>{b.classList.toggle("active", b.dataset.tab===tab); b.setAttribute('aria-selected', b.dataset.tab===tab)});
+    }
+    $$(".navbtn").forEach(b=> b.addEventListener("click", ()=> show(b.dataset.tab)) );
+    document.addEventListener("keydown", e=>{
+      if(e.key>='1' && e.key<='7'){ show(tabs[+e.key-1]); }
+      if(e.key=='/'){ e.preventDefault(); $('#topic').focus(); }
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); saveNotes(); }
+    });
+
+    // --- Explore (Wikipedia) ---
+    const summaries = new Map();
+    async function fetchWiki(q){
+      $('#exploreStatus').textContent = 'Searching…';
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}`;
+      const linksUrl = `https://en.wikipedia.org/w/api.php?action=query&prop=links&titles=${encodeURIComponent(q)}&pllimit=20&format=json&origin=*`;
+      try{
+        const [s, l] = await Promise.all([
+          fetch(url).then(r=>r.json()),
+          fetch(linksUrl).then(r=>r.json())
+        ]);
+        if(s.extract){
+          $('#summary').innerHTML = `<div>${s.extract}</div><div class="small" style="margin-top:8px">Source: <a href="${s.content_urls?.desktop?.page||'#'}" target="_blank" rel="noopener">Wikipedia</a></div>`;
+          $('#summaryActions').style.display = 'flex';
+          summaries.set(q, s.extract);
+        } else {
+          $('#summary').textContent = 'No summary found—try a more general term.';
+          $('#summaryActions').style.display = 'none';
+        }
+        const rl = $('#related');
+        rl.innerHTML='';
+        const pages = l?.query?.pages || {};
+        const first = Object.values(pages)[0];
+        (first?.links||[]).slice(0,20).forEach(p=>{
+          const a = document.createElement('a');
+          a.href = '#'; a.textContent = p.title; a.className='chip';
+          a.addEventListener('click', (ev)=>{ ev.preventDefault(); $('#topic').value=p.title; fetchWiki(p.title); });
+          rl.appendChild(a);
+        })
+        $('#exploreStatus').textContent = '';
+      }catch(err){
+        console.error(err);
+        $('#exploreStatus').textContent = 'Error fetching. Check your connection or try another term.';
+      }
+    }
+    $('#searchBtn').addEventListener('click', ()=>{ const q=$('#topic').value.trim(); if(q) fetchWiki(q); });
+    $('#luckyBtn').addEventListener('click', ()=>{
+      const ideas = ['Learning theory','Cognitive bias','Linear algebra','Photosynthesis','Docker (software)','World War II','Genetics','Computer networks','Quantum mechanics','Machine learning'];
+      const pick = ideas[Math.floor(Math.random()*ideas.length)];
+      $('#topic').value = pick; fetchWiki(pick);
+    });
+
+    // Add to Plan
+    $('#addToPlan').addEventListener('click', ()=>{
+      const t = $('#topic').value.trim(); if(!t) return;
+      $('#planTopic').value = t;
+      show('planner');
+    })
+
+    // Draft flashcards from summary (simple splitter + cloze)
+    $('#makeCards').addEventListener('click', ()=>{
+      const t = $('#topic').value.trim(); const text = summaries.get(t)||''; if(!text) return;
+      const sents = text.split(/(?<=[.!?])\s+/).slice(0,6);
+      const cards = sents.map(s=>{
+        // naive: hide first capitalized term
+        const m = s.match(/([A-Z][A-Za-z0-9\- ]{3,})/);
+        let front=s, back='';
+        if(m){ front = s.replace(m[1], '_____'); back = m[1]; }
+        else { front = s.replace(/\b(\w{6,})\b/,'_____'); back = RegExp.$1; }
+        return {front:`(${t}) ${front}`, back: back||s, created: Date.now() };
+      });
+      cards.forEach(addCardToDeck);
+      $('#fcStatus').textContent = `Drafted ${cards.length} cards from summary.`;
+      show('flash');
+    });
+
+    // --- Planner ---
+    function buildPlan(){
+      const topic = $('#planTopic').value.trim();
+      const minutes = Math.max(5, +$('#planMinutes').value||30);
+      const level = $('#planLevel').value;
+      if(!topic){ $('#planStatus').textContent = 'Enter a focus area.'; return; }
+      const today = new Date(); today.setHours(0,0,0,0);
+      const weeks = level==='beginner'?6: level==='advanced'?10:8;
+      const totalMin = weeks*7*minutes;
+      const milestones = [
+        {name:'Basics', pct:10}, {name:'Fundamentals', pct:30}, {name:'Projects', pct:55}, {name:'Advanced', pct:80}, {name:'Mastery', pct:100}
+      ].map((m,i)=>{
+        const day = Math.round( (m.pct/100) * (weeks*7) );
+        const d = new Date(today); d.setDate(d.getDate()+day);
+        return { ...m, eta: d.toISOString().slice(0,10) };
+      });
+      // sessions (next 28 days)
+      const sessions = [];
+      for(let i=0;i<Math.min(weeks*7,28);i++){
+        const d = new Date(today); d.setDate(d.getDate()+i);
+        sessions.push({date:d.toISOString().slice(0,10), topic, minutes, done:false});
+      }
+      const plan = {topic, minutes, level, weeks, milestones, sessions};
+      store.set('plan', plan);
+      renderPlan();
+      $('#planStatus').textContent = `Plan saved • ~${totalMin} minutes over ${weeks} weeks`;
+    }
+    $('#buildPlan').addEventListener('click', buildPlan);
+    function renderPlan(){
+      const p = store.get('plan', null); if(!p){ $('#milestones').innerHTML='No plan yet.'; $('#sessions').innerHTML=''; return; }
+      $('#planTopic').value = p.topic; $('#planMinutes').value=p.minutes; $('#planLevel').value=p.level;
+      $('#milestones').innerHTML = p.milestones.map(m=>`<div class='item flex'><div><b>${m.name}</b><div class='small'>${m.pct}%</div></div><div class='right pill'>ETA ${m.eta}</div></div>`).join('');
+      $('#sessions').innerHTML = p.sessions.map((s,i)=>`<div class='item flex'><div>${s.date}</div><div class='small'>${p.topic}</div><div class='right'><label class='small'><input type='checkbox' ${s.done?'checked':''} data-sess='${i}'/> done</label></div></div>`).join('');
+      $$("[data-sess]").forEach(cb=> cb.addEventListener('change', e=>{ const idx=+e.target.dataset.sess; const plan=store.get('plan',{}); plan.sessions[idx].done=e.target.checked; store.set('plan',plan); if(e.target.checked) addStudyMinutes(plan.minutes); renderProgress(); }) );
+    }
+    $('#exportPlan').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(store.get('plan',{}), null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='plan.json'; a.click(); URL.revokeObjectURL(url);
+    });
+    $('#importPlan').addEventListener('click', ()=> $('#importFile').click());
+    $('#importFile').addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const plan=JSON.parse(reader.result); store.set('plan',plan); renderPlan(); $('#planStatus').textContent='Plan imported.' }catch{ $('#planStatus').textContent='Invalid file.' } }; reader.readAsText(f);
+    });
+
+    // --- Flashcards & SRS (SM-2 lite) ---
+    function deck(){ return store.get('deck', []); }
+    function saveDeck(d){ store.set('deck', d); renderDeck(); refreshDue(); renderProgress(); }
+    function addCardToDeck(card){
+      const d = deck();
+      d.push({id:crypto.randomUUID(), front:card.front, back:card.back, created:card.created||Date.now(), ease:2.5, interval:0, due:Date.now(), reps:0});
+      saveDeck(d);
+    }
+    $('#addCard').addEventListener('click', ()=>{
+      const front=$('#fcFront').value.trim(); const back=$('#fcBack').value.trim(); if(!front||!back){ $('#fcStatus').textContent='Enter both sides.'; return; }
+      addCardToDeck({front,back}); $('#fcFront').value=''; $('#fcBack').value=''; $('#fcStatus').textContent='Added card.';
+    });
+    $('#exportCards').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(deck(), null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='flashcards.json'; a.click(); URL.revokeObjectURL(url);
+    });
+    $('#importCards').addEventListener('click', ()=> $('#importCardsFile').click());
+    $('#importCardsFile').addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return; const reader=new FileReader(); reader.onload=()=>{ try{ const d=JSON.parse(reader.result); saveDeck(d); $('#fcStatus').textContent='Deck imported.' }catch{ $('#fcStatus').textContent='Invalid file.' } }; reader.readAsText(f);
+    });
+
+    function renderDeck(){
+      const d = deck();
+      $('#deck').innerHTML = d.map(c=>`<div class='item'><div><b>${escapeHtml(c.front)}</b></div><div class='small'>${escapeHtml(c.back)}</div><div class='small'>due ${new Date(c.due).toLocaleString()} • reps ${c.reps} • ease ${c.ease.toFixed(2)} • int ${c.interval}d</div></div>`).join('');
+      $('#statCards').textContent = d.length;
+    }
+
+    function escapeHtml(s){ return s.replace(/[&<>]/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]) ); }
+
+    // Review flow
+    let currentCard=null; let showing=false;
+    function dueCards(){ const now=Date.now(); return deck().filter(c=>c.due<=now).sort((a,b)=>a.due-b.due); }
+    function refreshDue(){ const n = dueCards().length; $('#dueCount').textContent = `${n} due`; $('#statDue').textContent=n; if(n===0){ currentCard=null; showing=false; $('#reviewFront').textContent='No card due. Add cards or wait until due time.'; $('#reviewBack').style.display='none'; $('#gradeBtns').style.display='none'; } }
+    function nextCard(){ const d = dueCards(); if(d.length){ currentCard=d[0]; $('#reviewFront').textContent=currentCard.front; $('#reviewBack').textContent=currentCard.back; $('#reviewBack').style.display='none'; $('#gradeBtns').style.display='none'; showing=false; } else { currentCard=null; }
+    }
+    $('#showAnswer').addEventListener('click', ()=>{ if(!currentCard){ nextCard(); return; } showing=true; $('#reviewBack').style.display='block'; $('#gradeBtns').style.display='inline-flex'; });
+    $$('#gradeBtns .btn').forEach(b=> b.addEventListener('click', ()=> grade(+b.dataset.q)) );
+
+    function grade(q){ // q:1..5
+      if(!currentCard) return;
+      const d = deck(); const idx = d.findIndex(c=>c.id===currentCard.id); const c = d[idx];
+      // SM-2 lite
+      const now = Date.now();
+      if(q<3){ c.interval = 0; c.reps = 0; c.due = now + 10*60*1000; } // 10 minutes
+      else {
+        c.ease = Math.max(1.3, c.ease + (0.1 - (5-q)*(0.08 + (5-q)*0.02)));
+        c.reps += 1;
+        if(c.reps===1){ c.interval = 1; }
+        else if(c.reps===2){ c.interval = 3; }
+        else { c.interval = Math.round(c.interval * c.ease); }
+        c.due = now + c.interval*24*60*60*1000;
+      }
+      d[idx]=c; saveDeck(d); refreshDue(); nextCard();
+    }
+
+    // init review
+    renderDeck(); refreshDue(); nextCard();
+
+    // --- Quiz from deck ---
+    $('#makeQuiz').addEventListener('click', ()=>{
+      const d = deck(); if(d.length<4){ $('#quizArea').innerHTML='<div class="item">Add at least 4 flashcards to generate a quiz.</div>'; return; }
+      const qs = [];
+      const shuffled = [...d].sort(()=>Math.random()-0.5).slice(0,5);
+      shuffled.forEach((c,i)=>{
+        const wrong = [...d.filter(x=>x.id!==c.id)].sort(()=>Math.random()-0.5).slice(0,3).map(x=>x.back);
+        const answers = [...wrong, c.back].sort(()=>Math.random()-0.5);
+        qs.push({q:c.front, a:c.back, choices:answers});
+      });
+      $('#quizArea').innerHTML = qs.map((q,i)=>{
+        return `<div class='item'><div><b>Q${i+1}.</b> ${escapeHtml(q.q)}</div>`+
+          q.choices.map((ch,j)=>`<label class='small' style='display:block;margin-top:6px'><input type='radio' name='q${i}' value='${escapeHtml(ch)}'/> ${escapeHtml(ch)}</label>`).join('')+
+          `<div class='small' id='qr${i}' style='margin-top:6px'></div></div>`;
+      }).join('') + `<div class='flex' style='margin-top:10px'><button class='btn primary' id='submitQuiz'>Check Answers</button></div>`;
+      $('#submitQuiz').addEventListener('click', ()=>{
+        let correct=0; qs.forEach((q,i)=>{ const picked = (document.querySelector(`input[name=q${i}]:checked`)||{}).value; const ok = picked===q.a; if(ok) correct++; $(`#qr${i}`).textContent = ok? '✓ Correct' : `✗ Answer: ${q.a}`; });
+        const msg = `${correct}/${qs.length} correct`;
+        const n = document.createElement('div'); n.className='pill'; n.textContent=msg; $('#quizArea').prepend(n);
+      });
+    });
+
+    // --- Timer ---
+    let timer=null, secs=25*60, mode='focus';
+    function updateTimer(){ const m=Math.floor(secs/60).toString().padStart(2,'0'); const s=(secs%60).toString().padStart(2,'0'); $('#timerDisplay').textContent=`${m}:${s}`; }
+    function startTimer(){ if(timer) return; $('#timerStatus').textContent = mode==='focus'? 'Focusing…' : 'Break…'; timer=setInterval(()=>{ if(secs>0){ secs--; updateTimer(); } else { clearInterval(timer); timer=null; if(mode==='focus'){ addStudyMinutes(+$('#focusLen').value); mode='break'; secs=(+$('#breakLen').value||5)*60; alert('Break time!'); } else { mode='focus'; secs=(+$('#focusLen').value||25)*60; alert('Focus time!'); } updateTimer(); startTimer(); } }, 1000); }
+    function resetTimer(){ clearInterval(timer); timer=null; mode='focus'; secs=(+$('#focusLen').value||25)*60; updateTimer(); $('#timerStatus').textContent='Ready'; }
+    $('#startTimer').addEventListener('click', ()=>{ if(!timer){ secs=(mode==='focus'?(+$('#focusLen').value||25):(+$('#breakLen').value||5))*60; updateTimer(); startTimer(); } });
+    $('#resetTimer').addEventListener('click', resetTimer);
+    updateTimer();
+
+    // minutes + streak
+    function addStudyMinutes(min){ const stats = store.get('stats', {minutes:0, days:{}}); stats.minutes += min; const key=new Date().toISOString().slice(0,10); stats.days[key]=(stats.days[key]||0)+min; store.set('stats', stats); renderProgress(); }
+
+    // --- Notes ---
+    function saveNotes(){ store.set('notes', {text: $('#notesArea').value, ts: Date.now()}); $('#notesStatus').textContent='Saved.'; setTimeout(()=>$('#notesStatus').textContent='', 1500); }
+    $('#saveNotes').addEventListener('click', saveNotes);
+    $('#clearNotes').addEventListener('click', ()=>{ if(confirm('Clear notes?')){ $('#notesArea').value=''; saveNotes(); }});
+
+    // --- Progress ---
+    function calcStreak(days){
+      const sorted = Object.keys(days).sort(); if(sorted.length===0) return 0;
+      let streak=0; const today = new Date(); today.setHours(0,0,0,0);
+      for(let i=0; ; i++){
+        const d = new Date(today); d.setDate(d.getDate()-i); const key=d.toISOString().slice(0,10);
+        if(days[key] && days[key]>0) streak++; else break;
+      }
+      return streak;
+    }
+    function renderProgress(){ const stats = store.get('stats', {minutes:0, days:{}}); $('#statMinutes').textContent = stats.minutes; $('#statStreak').textContent = calcStreak(stats.days); $('#statDue').textContent = dueCards().length; }
+
+    // init notes + plan + stats
+    (function init(){ const n=store.get('notes',{text:''}); $('#notesArea').value=n.text||''; renderPlan(); renderProgress(); })();
+  </script>  <!--
+  How to use (quick):
+  1) Explore tab: search a topic, skim the summary, click related items. Add to Plan or draft cards.
+  2) Planner: set daily minutes & difficulty, build plan, check off sessions.
+  3) Flashcards: add facts; review due cards using the SRS engine.
+  4) Quiz: generate quick MCQs from your own deck.
+  5) Timer: run focus/break cycles—minutes are tracked to your stats & streak.
+  6) Notes: capture ideas; saved locally. Export/import plan & deck anytime.
+  --></body>
+</html>

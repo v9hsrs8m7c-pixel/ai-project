@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>3D Rubik's Cube — fixed animation direction</title>
+<style>
+  html,body { height:100%; margin:0; background:#0b0b0f; color:#ddd; font-family:Inter,system-ui,sans-serif; }
+  #desc { position:absolute; left:12px; top:12px; background:rgba(255,255,255,0.04); padding:10px 12px; border-radius:8px; font-size:14px; line-height:1.4; color:#e6eef8 }
+  #hint { position:absolute; right:12px; top:12px; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; font-size:13px; color:#cbd6e6 }
+  canvas { display:block; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.6.0/lib/p5.min.js"></script>
+</head>
+<body>
+<div id="desc">
+  <strong>3D Rubik's Cube</strong><br/>
+  Mouse drag — rotate • Wheel — zoom<br/>
+  U/D/L/R/F/B keys — turn faces (Shift=CCW)<br/>
+  S = scramble • Space = pause/play
+</div>
+<div id="hint">Click canvas to enable keyboard</div>
+
+<script>
+let N = 3;
+let cubieSize = 64;
+let gap = 0;
+let animSpeed = 10;
+let cube = [];
+let movesQueue = [];
+let animating = false;
+let animProgress = 0;
+let currentMove = null;
+let globalRotX = -0.6, globalRotY = 0.6;
+let zoom = 700;
+let isPaused = false;
+
+const faceColors = {
+  U: [255,255,255],
+  D: [255,210,0],
+  L: [255,100,0],
+  R: [180,0,0],
+  F: [0,130,0],
+  B: [0,70,200]
+};
+
+function rotateVec(v, axis, dir){
+  let [x,y,z]=v;
+  let a=dir*Math.PI/2, c=Math.cos(a), s=Math.sin(a);
+  if(axis==='x') return [x, y*c - z*s, y*s + z*c];
+  if(axis==='y') return [x*c + z*s, y, -x*s + z*c];
+  if(axis==='z') return [x*c - y*s, x*s + y*c, z];
+  return v;
+}
+
+function makeCubie(){
+  return {
+    faces: {
+      U: [0,-1,0],
+      D: [0,1,0],
+      L: [-1,0,0],
+      R: [1,0,0],
+      F: [0,0,1],
+      B: [0,0,-1]
+    },
+    colors: JSON.parse(JSON.stringify(faceColors))
+  };
+}
+
+function initCube(){
+  cube = new Array(N);
+  for(let x=0;x<N;x++){
+    cube[x]=new Array(N);
+    for(let y=0;y<N;y++){
+      cube[x][y]=new Array(N);
+      for(let z=0;z<N;z++){
+        cube[x][y][z]=makeCubie();
+      }
+    }
+  }
+}
+
+function coordToPos(i,j,k){
+  let off=(N-1)/2;
+  return [(i-off)*(cubieSize+gap),
+          (j-off)*(cubieSize+gap),
+          (k-off)*(cubieSize+gap)];
+}
+
+function easeInOut(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+function cubieInLayer(x,y,z,axis,layer){
+  if(axis==='x')return x===layer;
+  if(axis==='y')return y===layer;
+  if(axis==='z')return z===layer;
+  return false;
+}
+
+function rotateCubieFaces(cubie,axis,dir){
+  let nf={};
+  for(let f in cubie.faces){
+    nf[f]=rotateVec(cubie.faces[f],axis,dir);
+  }
+  cubie.faces=nf;
+  return cubie;
+}
+
+function applyRotationOnce(axis,layer,dir){
+  let newCube=Array(N).fill().map(()=>Array(N).fill().map(()=>Array(N)));
+  for(let x=0;x<N;x++)
+    for(let y=0;y<N;y++)
+      for(let z=0;z<N;z++)
+        newCube[x][y][z]=JSON.parse(JSON.stringify(cube[x][y][z]));
+
+  for(let x=0;x<N;x++)
+    for(let y=0;y<N;y++)
+      for(let z=0;z<N;z++){
+        if(!cubieInLayer(x,y,z,axis,layer))continue;
+        let nx=x,ny=y,nz=z;
+        if(axis==='x'){
+          if(dir>0){nx=x;ny=z;nz=N-1-y;}
+          else     {nx=x;ny=N-1-z;nz=y;}
+        }
+        else if(axis==='y'){
+          if(dir>0){nx=N-1-z;ny=y;nz=x;}
+          else     {nx=z;ny=y;nz=N-1-x;}
+        }
+        else if(axis==='z'){
+          if(dir>0){nx=y;ny=N-1-x;nz=z;}
+          else     {nx=N-1-y;ny=x;nz=z;}
+        }
+        newCube[nx][ny][nz]=JSON.parse(JSON.stringify(cube[x][y][z]));
+        // ✅ FIX: flip the sign for cubie face rotation
+        rotateCubieFaces(newCube[nx][ny][nz], axis, -dir);
+      }
+  cube=newCube;
+}
+
+function setup(){
+  createCanvas(windowWidth,windowHeight,WEBGL);
+  pixelDensity(1);
+  initCube();
+  noStroke();
+}
+function windowResized(){resizeCanvas(windowWidth,windowHeight);}
+
+function draw(){
+  background(11);
+  ambientLight(100);
+  
+  if(isPaused){
+    push();resetMatrix();translate(-width/2+14,-height/2+56);
+    noLights();fill(255,150);textSize(14);text("PAUSED",0,0);pop();
+  }
+
+  push();
+  translate(0,0,-zoom);
+  rotateX(globalRotX);
+  rotateY(globalRotY);
+
+  if(!animating && movesQueue.length>0 && !isPaused){
+    currentMove=movesQueue.shift();
+    animating=true;animProgress=0;
+  }
+  if(animating && !isPaused){
+    animProgress++;
+    if(animProgress>=animSpeed){
+      applyRotationOnce(currentMove.axis,currentMove.layer,currentMove.dir);
+      animating=false;currentMove=null;animProgress=0;
+    }
+  }
+
+  let drawList=[];
+  for(let x=0;x<N;x++)
+    for(let y=0;y<N;y++)
+      for(let z=0;z<N;z++)
+        drawList.push({x,y,z,c:cube[x][y][z]});
+  drawList.sort((A,B)=>approxDepth(B)-approxDepth(A));
+
+  function approxDepth(o){
+    let [x,y,z]=coordToPos(o.x,o.y,o.z);
+    let c=Math.cos(globalRotY),s=Math.sin(globalRotY);
+    let rx=x*c+z*s,rz=-x*s+z*c;
+    x=rx;z=rz;
+    c=Math.cos(globalRotX);s=Math.sin(globalRotX);
+    let ry=y*c-z*s;rz=y*s+z*c;
+    return rz;
+  }
+
+  for(let item of drawList){
+    let {x,y,z,c}=item;
+    push();
+    if(animating&&currentMove&&cubieInLayer(x,y,z,currentMove.axis,currentMove.layer)){
+      let t=animProgress/animSpeed;
+      let angle= -currentMove.dir*HALF_PI*easeInOut(t); 
+      if(currentMove.axis==='x')rotateX(angle);
+      if(currentMove.axis==='y')rotateY(angle);
+      if(currentMove.axis==='z')rotateZ(angle);
+    }
+    let [sx,sy,sz]=coordToPos(x,y,z);
+    translate(sx,sy,sz);
+    drawCubie(c);
+    pop();
+  }
+  pop();
+}
+
+function drawCubie(cubie){
+  let s=(cubieSize-gap)/2+0.6;
+  ambientMaterial(60);
+  box(cubieSize-gap);
+  for(let f in cubie.faces){
+    let [nx,ny,nz]=cubie.faces[f];
+    let col=cubie.colors[f];
+    drawSticker(nx*s,ny*s,nz*s,nx,ny,nz,col);
+  }
+}
+
+function drawSticker(cx,cy,cz,nx,ny,nz,col){
+  push();
+  translate(cx,cy,cz);
+  if(nx===1)rotateY(HALF_PI);
+  if(nx===-1)rotateY(-HALF_PI);
+  if(ny===1)rotateX(-HALF_PI);
+  if(ny===-1)rotateX(HALF_PI);
+  if(nz===-1)rotateY(PI);
+  emissiveMaterial(col[0],col[1],col[2]);
+  plane(cubieSize*0.9,cubieSize*0.9);
+  pop();
+}
+
+let dragging=false,lastX=0,lastY=0;
+function mousePressed(){dragging=true;lastX=mouseX;lastY=mouseY;}
+function mouseReleased(){dragging=false;}
+function mouseDragged(){
+  if(mouseButton===LEFT){
+    let dx=(mouseX-lastX)*0.01;
+    let dy=(mouseY-lastY)*0.01;
+    globalRotY+=dx;
+    globalRotX+=dy;
+    lastX=mouseX;lastY=mouseY;
+  }
+}
+function mouseWheel(e){zoom+=e.delta;zoom=constrain(zoom,200,2000);return false;}
+
+function keyPressed(){
+  if(key===' '){isPaused=!isPaused;return;}
+  if(key==='M'||key==='m'){scramble(20);return;}
+  let dir=keyIsDown(SHIFT)?-1:1;
+  let k=key.toUpperCase();
+  if(["U","D","L","R","F","B"].includes(k)) enqueueMove(k,dir);
+}
+
+function enqueueMove(face,dir){
+  let axis='x',layer=0;
+  if(face==='U'){axis='y';layer=0;dir=dir;}
+  if(face==='D'){axis='y';layer=N-1;dir=-dir;}
+  if(face==='L'){axis='x';layer=0;dir=dir;}
+  if(face==='R'){axis='x';layer=N-1;dir=-dir;}
+  if(face==='F'){axis='z';layer=N-1;dir=-dir;}
+  if(face==='B'){axis='z';layer=0;dir=dir;}
+  movesQueue.push({axis,layer,dir});
+}
+
+function scramble(m){
+  let faces=['U','D','L','R','F','B'];
+  for(let i=0;i<m;i++){
+    enqueueMove(random(faces),random([1,-1]));
+  }
+}
+</script>
+</body>
+</html>

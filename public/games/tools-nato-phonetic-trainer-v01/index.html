@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NATO Phonetic Big Trainer (Voice + Auto Next)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: #020617;
+      color: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      background: #020617;
+    }
+
+    .app {
+      background: #020617;
+      border-radius: 0;
+      padding: 16px 14px 24px;
+      max-width: 520px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    @media (min-width: 600px) {
+      body { align-items: center; }
+      .app {
+        border-radius: 18px;
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.9);
+        border: 1px solid #1f293b;
+        padding: 20px 22px 26px;
+      }
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin: 0;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      margin-top: 4px;
+      margin-bottom: 8px;
+    }
+
+    /* Mode toggle */
+    .mode-toggle {
+      display: inline-flex;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      padding: 3px;
+      margin-bottom: 4px;
+    }
+    .mode-btn {
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      font-size: 0.85rem;
+      padding: 6px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .mode-btn.active {
+      background: #1f2937;
+      color: #f9fafb;
+      font-weight: 500;
+    }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+
+    .stats strong {
+      color: #e5e7eb;
+    }
+
+    .card {
+      border-radius: 16px;
+      padding: 14px 14px;
+      background: radial-gradient(circle at top left, #1f2937, #020617);
+      border: 1px solid #1f2937;
+    }
+
+    .label {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+
+    .prompt-letter {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      margin-bottom: 4px;
+    }
+
+    .word-display {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      margin-bottom: 4px;
+    }
+
+    .prompt-sub, .hint {
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .input-row {
+      display: flex;
+      flex-direction: row;
+      gap: 8px;
+      margin-top: 10px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 420px) {
+      .input-row { flex-direction: column; }
+    }
+
+    input[type="text"], textarea {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 1rem;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 70px;
+      resize: vertical;
+      font-size: 0.95rem;
+      line-height: 1.35;
+    }
+
+    input[type="text"]:focus, textarea:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 1px #60a5fa33;
+    }
+
+    .buttons-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
+      margin-top: 4px;
+    }
+
+    @media (min-width: 520px) {
+      .buttons-grid {
+        display: flex;
+        flex-wrap: wrap;
+      }
+    }
+
+    .btn {
+      border-radius: 999px;
+      border: none;
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      background: #1f2937;
+      color: #e5e7eb;
+      text-align: center;
+      min-height: 38px;
+      touch-action: manipulation;
+    }
+
+    .btn.primary {
+      background: #2563eb;
+      color: #f9fafb;
+      font-weight: 500;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    #hearLetterBtn, #hearWordBtn {
+      background: #334155;
+    }
+
+    #voiceWordBtn.listening {
+      background: #16a34a;
+      color: #f9fafb;
+    }
+
+    .feedback {
+      min-height: 1.2em;
+      font-size: 0.9rem;
+      margin-top: 4px;
+    }
+    .feedback.correct { color: #4ade80; }
+    .feedback.incorrect { color: #f97373; }
+    .feedback.neutral { color: #9ca3af; }
+
+    .answer {
+      font-size: 0.82rem;
+      color: #9ca3af;
+      min-height: 1.3em;
+      margin-top: 2px;
+    }
+
+    .answer strong { color: #e5e7eb; }
+
+    /* Stats panel (통계) */
+    .stats-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+      color: #9ca3af;
+    }
+
+    .stats-panel {
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      padding: 8px 10px;
+      background: #020617;
+      font-size: 0.78rem;
+      max-height: 260px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border-bottom: 1px solid #111827;
+      padding: 3px 4px;
+      text-align: left;
+    }
+
+    th {
+      color: #9ca3af;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      background: #020617;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .letter-cell {
+      font-weight: 600;
+      color: #e5e7eb;
+    }
+
+    .weak {
+      color: #f97373;
+      font-weight: 600;
+    }
+
+    /* Spelling helper */
+    .spell-card {
+      margin-top: 10px;
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: #020617;
+      border: 1px solid #1f2937;
+      font-size: 0.85rem;
+    }
+
+    .spell-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .spell-input-row {
+      display: flex;
+      gap: 8px;
+      margin: 6px 0 6px;
+    }
+
+    @media (max-width: 420px) {
+      .spell-input-row { flex-direction: column; }
+    }
+
+    .spell-output {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      line-height: 1.3;
+      max-height: 120px;
+      overflow-y: auto;
+      border-top: 1px solid #111827;
+      padding-top: 4px;
+      margin-top: 4px;
+    }
+
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      padding: 3px 8px;
+      margin: 2px 4px 2px 0;
+      font-size: 0.78rem;
+      background: #020617;
+    }
+    .tag strong { color: #e5e7eb; }
+
+    .mode-section { display: none; }
+    .mode-section.active { display: block; }
+
+    .toggle-line {
+      margin-top: 2px;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .toggle-line input {
+      width: auto;
+      margin: 0;
+    }
+
+    .voice-status {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 4px;
+      min-height: 1.1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>NATO Phonetic Big Trainer 🎧</h1>
+      <div class="subtitle">
+        Mode 1: Letter → Word • Mode 2: Word → Phonetic spelling (with voice)
+      </div>
+    </header>
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="letter">Letter Quiz</button>
+      <button class="mode-btn" data-mode="word">Word Spelling Test</button>
+    </div>
+
+    <!-- Letter Quiz Stats -->
+    <section class="stats">
+      <div>Letter score: <strong id="score">0</strong>/<span id="total">0</span></div>
+      <div>Accuracy: <strong id="accuracy">0%</strong></div>
+      <div>Streak: <strong id="streak">0</strong></div>
+      <div>Weak letters: <strong id="weakSummary">—</strong></div>
+    </section>
+
+    <!-- Word Test Stats -->
+    <section class="stats">
+      <div>Word test score: <strong id="wordScore">0</strong>/<span id="wordTotal">0</span></div>
+      <div>Word accuracy: <strong id="wordAccuracy">0%</strong></div>
+    </section>
+
+    <!-- LETTER QUIZ MODE -->
+    <section id="modeLetter" class="mode-section active">
+      <section class="card">
+        <div class="label">Quiz: Type the phonetic word for this letter</div>
+        <div class="prompt-letter" id="promptLetter">A</div>
+        <div class="prompt-sub">
+          Example: A → Alfa. Tap <strong>Hear</strong> to listen. Enter/Go = Check / Next.
+        </div>
+      </section>
+
+      <section class="input-row">
+        <input
+          type="text"
+          id="answerInput"
+          placeholder="Type NATO word (e.g. Alfa)"
+          autocomplete="off"
+          inputmode="text"
+        />
+        <button class="btn primary" id="checkBtn">Check</button>
+      </section>
+
+      <section class="buttons-grid">
+        <button class="btn" id="hearLetterBtn">🔊 Hear</button>
+        <button class="btn" id="idkBtn">I don't know</button>
+        <button class="btn" id="nextBtn" disabled>Next</button>
+        <button class="btn" id="resetBtn">Reset letter stats</button>
+      </section>
+
+      <div class="toggle-line">
+        <label>
+          <input type="checkbox" id="autoNextLetter" />
+          Auto next letter after answer
+        </label>
+      </div>
+
+      <section>
+        <div id="feedback" class="feedback neutral"></div>
+        <div id="answer" class="answer"></div>
+        <div class="hint">
+          Trainer shows weak letters more often. Click 통계 rows to drill a letter.
+        </div>
+      </section>
+
+      <!-- 통계 Section -->
+      <section>
+        <div class="stats-toggle">
+          <span>통계 (per-letter stats)</span>
+          <button class="btn" id="toggleStatsBtn" style="font-size:0.8rem;padding:6px 10px;min-height:auto;">
+            Show
+          </button>
+        </div>
+        <div class="stats-panel" id="statsPanel">
+          <table>
+            <thead>
+              <tr>
+                <th>Letter</th>
+                <th>Word</th>
+                <th>Seen</th>
+                <th>Correct</th>
+                <th>Acc%</th>
+              </tr>
+            </thead>
+            <tbody id="statsTableBody"></tbody>
+          </table>
+          <div class="hint" style="margin-top:6px;">
+            Click a row to drill that letter immediately.
+          </div>
+        </div>
+      </section>
+
+      <!-- Spelling helper -->
+      <section class="spell-card">
+        <div class="spell-title">Spelling helper (use NATO to spell words)</div>
+        <div>Type any English text. Each letter will be converted to phonetic words.</div>
+        <div class="spell-input-row">
+          <input
+            type="text"
+            id="spellInput"
+            placeholder="Example: Hello world 123"
+            autocomplete="off"
+          />
+          <button class="btn" id="spellBtn">Convert</button>
+        </div>
+        <div class="spell-output" id="spellOutput">
+          <span style="color:#6b7280;">Result will appear here, like <span class="tag"><strong>A</strong> – Alfa</span></span>
+        </div>
+      </section>
+    </section>
+
+    <!-- WORD SPELLING TEST MODE -->
+    <section id="modeWord" class="mode-section">
+      <section class="card">
+        <div class="label">Word to spell (using NATO):</div>
+        <div class="word-display" id="wordDisplay">HELLO</div>
+        <div class="prompt-sub">
+          Example: HELLO → <em>Hotel Echo Lima Lima Oscar</em>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="label">Your phonetic spelling</div>
+        <div class="input-row" style="flex-direction:column;">
+          <textarea
+            id="userWordInput"
+            placeholder="Type or speak NATO words (e.g. Hotel Echo Lima Lima Oscar)"
+          ></textarea>
+        </div>
+
+        <div class="buttons-grid">
+          <button class="btn primary" id="wordCheckBtn">Check</button>
+          <button class="btn" id="wordShowAnswerBtn">Show answer</button>
+          <button class="btn" id="wordNextBtn" disabled>Next word</button>
+          <button class="btn" id="hearWordBtn">🔊 Hear correct</button>
+          <button class="btn" id="voiceWordBtn">🎙️ Voice input</button>
+        </div>
+
+        <div class="toggle-line">
+          <label>
+            <input type="checkbox" id="autoNextWord" />
+            Auto next word after answer
+          </label>
+        </div>
+
+        <div id="voiceStatus" class="voice-status"></div>
+        <div id="wordFeedback" class="feedback neutral"></div>
+        <div id="wordAnswerArea" class="answer"></div>
+      </section>
+    </section>
+  </div>
+
+<script>
+  // =========================
+  // Shared NATO data
+  // =========================
+  const items = [
+    { l:"A", w:"Alfa",     v:["ALFA","ALPHA"] },
+    { l:"B", w:"Bravo",    v:["BRAVO"] },
+    { l:"C", w:"Charlie",  v:["CHARLIE"] },
+    { l:"D", w:"Delta",    v:["DELTA"] },
+    { l:"E", w:"Echo",     v:["ECHO"] },
+    { l:"F", w:"Foxtrot",  v:["FOXTROT"] },
+    { l:"G", w:"Golf",     v:["GOLF"] },
+    { l:"H", w:"Hotel",    v:["HOTEL"] },
+    { l:"I", w:"India",    v:["INDIA"] },
+    { l:"J", w:"Juliett",  v:["JULIETT","JULIET"] },
+    { l:"K", w:"Kilo",     v:["KILO"] },
+    { l:"L", w:"Lima",     v:["LIMA"] },
+    { l:"M", w:"Mike",     v:["MIKE"] },
+    { l:"N", w:"November", v:["NOVEMBER"] },
+    { l:"O", w:"Oscar",    v:["OSCAR"] },
+    { l:"P", w:"Papa",     v:["PAPA"] },
+    { l:"Q", w:"Quebec",   v:["QUEBEC"] },
+    { l:"R", w:"Romeo",    v:["ROMEO"] },
+    { l:"S", w:"Sierra",   v:["SIERRA"] },
+    { l:"T", w:"Tango",    v:["TANGO"] },
+    { l:"U", w:"Uniform",  v:["UNIFORM"] },
+    { l:"V", w:"Victor",   v:["VICTOR"] },
+    { l:"W", w:"Whiskey",  v:["WHISKEY","WHISKY"] },
+    { l:"X", w:"Xray",     v:["XRAY","X-RAY"] },
+    { l:"Y", w:"Yankee",   v:["YANKEE"] },
+    { l:"Z", w:"Zulu",     v:["ZULU"] },
+  ];
+
+  const natoByLetter = {};
+  items.forEach(it => { natoByLetter[it.l] = it; });
+
+  const STORAGE_KEY = "natoBigTrainerV3";
+
+  function normalize(s){
+    return s.trim().toUpperCase().replace(/[^A-Z]/g,"");
+  }
+
+  function capWord(str) {
+    const lower = str.toLowerCase();
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }
+
+  function speak(text){
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const msg = new SpeechSynthesisUtterance(text);
+    msg.lang = "en-US";
+    msg.rate = 0.9;
+    msg.pitch = 1.0;
+    window.speechSynthesis.speak(msg);
+  }
+
+  // =========================
+  // LETTER QUIZ STATE
+  // =========================
+  let stats = items.map(()=>({ seen:0, correct:0 }));
+  let idx = 0;
+  let seen = 0;
+  let correct = 0;
+  let streak = 0;
+  let answered = false;
+
+  let cycle = [];
+  function refillCycle(){
+    cycle = [...Array(items.length).keys()]; // [0..25]
+  }
+
+  function pickFromCycleWeighted(){
+    if (cycle.length === 0) refillCycle();
+    const weights = cycle.map(i => {
+      const s = stats[i];
+      let acc = s.seen > 0 ? s.correct / s.seen : 0;
+      let diff = 1 - acc;
+      if (s.seen === 0) diff = 1.2;
+      return 0.3 + 1.7 * diff;
+    });
+    const totalW = weights.reduce((a,b)=>a+b,0);
+    let r = Math.random() * totalW;
+    for (let k = 0; k < cycle.length; k++) {
+      if (r < weights[k]) {
+        const chosen = cycle[k];
+        cycle.splice(k,1);
+        return chosen;
+      }
+      r -= weights[k];
+    }
+    const fallback = cycle[cycle.length - 1];
+    cycle.pop();
+    return fallback;
+  }
+
+  // =========================
+  // WORD TEST STATE
+  // =========================
+  const WORDS = [
+    "HELLO","WORLD","RADIO","PILOT","VECTOR","SCHOOL","STUDENT",
+    "NUMBER","COMPUTER","FLIGHT","SIGNAL","WINDOW","MUSIC","TRAIN",
+    "QUICK","JUMP","BROWN","FOX","LAZY","ZEBRA","MAP","NOTE","CODE"
+  ];
+  let currentWord = "";
+  let wordScore = 0;
+  let wordTotal = 0;
+  let wordDone = false;
+
+  // Mode
+  let currentMode = "letter";
+
+  // Local Storage (letter stats)
+  function saveState() {
+    try {
+      if (!("localStorage" in window)) return;
+      const data = { stats, seen, correct, streak };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function loadState() {
+    try {
+      if (!("localStorage" in window)) return;
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data || !Array.isArray(data.stats) || data.stats.length !== items.length) return;
+      stats = data.stats.map(s => ({
+        seen: Number(s.seen) || 0,
+        correct: Number(s.correct) || 0
+      }));
+      seen = Number(data.seen) || 0;
+      correct = Number(data.correct) || 0;
+      streak = Number(data.streak) || 0;
+    } catch (e) {}
+  }
+
+  const $ = id => document.getElementById(id);
+
+  // Letter quiz DOM
+  const promptLetterEl = $("promptLetter");
+  const answerInput = $("answerInput");
+  const checkBtn = $("checkBtn");
+  const idkBtn = $("idkBtn");
+  const nextBtn = $("nextBtn");
+  const resetBtn = $("resetBtn");
+  const hearLetterBtn = $("hearLetterBtn");
+  const feedbackEl = $("feedback");
+  const answerEl = $("answer");
+  const scoreSpan = $("score");
+  const totalSpan = $("total");
+  const accuracySpan = $("accuracy");
+  const streakSpan = $("streak");
+  const weakSummaryEl = $("weakSummary");
+  const statsPanel = $("statsPanel");
+  const statsTableBody = $("statsTableBody");
+  const toggleStatsBtn = $("toggleStatsBtn");
+  const spellInput = $("spellInput");
+  const spellBtn = $("spellBtn");
+  const spellOutput = $("spellOutput");
+  const autoNextLetter = $("autoNextLetter");
+
+  // Word test DOM
+  const wordDisplay = $("wordDisplay");
+  const userWordInput = $("userWordInput");
+  const wordCheckBtn = $("wordCheckBtn");
+  const wordShowAnswerBtn = $("wordShowAnswerBtn");
+  const wordNextBtn = $("wordNextBtn");
+  const hearWordBtn = $("hearWordBtn");
+  const voiceWordBtn = $("voiceWordBtn");
+  const voiceStatus = $("voiceStatus");
+  const wordFeedback = $("wordFeedback");
+  const wordAnswerArea = $("wordAnswerArea");
+  const wordScoreSpan = $("wordScore");
+  const wordTotalSpan = $("wordTotal");
+  const wordAccuracySpan = $("wordAccuracy");
+  const autoNextWord = $("autoNextWord");
+
+  const modeButtons = document.querySelectorAll(".mode-btn");
+  const modeLetterSection = $("modeLetter");
+  const modeWordSection = $("modeWord");
+
+  // LETTER QUIZ
+  function updateWeakSummary(){
+    const arr = items.map((it, i) => {
+      const s = stats[i];
+      if (s.seen === 0) return null;
+      const acc = s.correct / s.seen;
+      return { letter: it.l, acc };
+    }).filter(Boolean);
+
+    if (arr.length === 0) {
+      weakSummaryEl.textContent = "—";
+      return;
+    }
+
+    arr.sort((a,b)=>a.acc - b.acc);
+    const top = arr.slice(0,3);
+    weakSummaryEl.textContent = top.map(x => `${x.letter} (${Math.round(x.acc * 100)}%)`).join(", ");
+  }
+
+  function updateLetterStats(){
+    scoreSpan.textContent = correct;
+    totalSpan.textContent = seen;
+    const acc = seen ? Math.round(correct / seen * 100) : 0;
+    accuracySpan.textContent = acc + "%";
+    streakSpan.textContent = streak;
+    updateWeakSummary();
+    buildStatsTable();
+    saveState();
+  }
+
+  function showLetterAnswer(){
+    const it = items[idx];
+    answerEl.innerHTML = `<strong>${it.l}</strong> → <strong>${it.w}</strong>`;
+  }
+
+  function setLetterAnswered(state){
+    answered = state;
+    nextBtn.disabled = !state;
+    checkBtn.disabled = state;
+    idkBtn.disabled = state;
+  }
+
+  function weightedPick(){
+    return pickFromCycleWeighted();
+  }
+
+  function newLetterQuestion(){
+    idx = weightedPick();
+    const it = items[idx];
+    promptLetterEl.textContent = it.l;
+    feedbackEl.textContent = "";
+    feedbackEl.className = "feedback neutral";
+    answerEl.textContent = "";
+    setLetterAnswered(false);
+    answerInput.value = "";
+    answerInput.focus({ preventScroll: false });
+  }
+
+  function checkLetterAnswer(isIDK){
+    if (answered) return;
+
+    const it = items[idx];
+    stats[idx].seen++;
+    seen++;
+
+    let ok = false;
+    if (!isIDK){
+      const u = normalize(answerInput.value);
+      const variants = it.v.map(v => normalize(v));
+      ok = variants.includes(u);
+    }
+
+    if (ok){
+      stats[idx].correct++;
+      correct++;
+      streak++;
+      feedbackEl.textContent = "Correct!";
+      feedbackEl.className = "feedback correct";
+    } else {
+      streak = 0;
+      feedbackEl.textContent = isIDK
+        ? "Good choice—learn it, then hit Next."
+        : "Incorrect. Study this one.";
+      feedbackEl.className = "feedback incorrect";
+    }
+
+    showLetterAnswer();
+    speak(it.w);
+    updateLetterStats();
+    setLetterAnswered(true);
+
+    if (autoNextLetter.checked) {
+      setTimeout(() => {
+        if (currentMode === "letter") newLetterQuestion();
+      }, 1200);
+    }
+  }
+
+  function buildStatsTable(){
+    statsTableBody.innerHTML = "";
+    items.forEach((it, i) => {
+      const s = stats[i];
+      const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+
+      const acc = s.seen ? Math.round((s.correct / s.seen) * 100) : null;
+
+      const tdL = document.createElement("td");
+      tdL.textContent = it.l;
+      tdL.className = "letter-cell";
+
+      const tdW = document.createElement("td");
+      tdW.textContent = it.w;
+
+      const tdSeen = document.createElement("td");
+      tdSeen.textContent = s.seen;
+
+      const tdC = document.createElement("td");
+      tdC.textContent = s.correct;
+
+      const tdAcc = document.createElement("td");
+      tdAcc.textContent = acc === null ? "—" : acc + "%";
+      if (acc !== null && acc < 70) tdAcc.className = "weak";
+
+      tr.appendChild(tdL);
+      tr.appendChild(tdW);
+      tr.appendChild(tdSeen);
+      tr.appendChild(tdC);
+      tr.appendChild(tdAcc);
+
+      tr.addEventListener("click", () => {
+        idx = i;
+        promptLetterEl.textContent = it.l;
+        feedbackEl.textContent = `Drilling letter ${it.l}.`;
+        feedbackEl.className = "feedback neutral";
+        answerEl.textContent = "";
+        answerInput.value = "";
+        setLetterAnswered(false);
+        answerInput.focus({ preventScroll: false });
+      });
+
+      statsTableBody.appendChild(tr);
+    });
+  }
+
+  function spellText(){
+    const text = spellInput.value || "";
+    const upper = text.toUpperCase();
+    const map = Object.fromEntries(items.map(it => [it.l, it.w]));
+    const parts = [];
+
+    for (let ch of upper){
+      if (/[A-Z]/.test(ch)) {
+        const word = map[ch];
+        parts.push(`<span class="tag"><strong>${ch}</strong> – ${word}</span>`);
+      } else if (ch === " ") {
+        parts.push("<span style='display:inline-block;width:8px;'></span>");
+      } else {
+        parts.push(`<span class="tag"><strong>${ch}</strong></span>`);
+      }
+    }
+
+    if (!parts.length){
+      spellOutput.innerHTML =
+        `<span style="color:#6b7280;">Result will appear here, like <span class="tag"><strong>A</strong> – Alfa</span></span>`;
+    } else {
+      spellOutput.innerHTML = parts.join(" ");
+    }
+  }
+
+  // WORD TEST
+  function wordToPhoneticArray(word) {
+    const arr = [];
+    const upper = word.toUpperCase();
+    for (const ch of upper) {
+      if (/[A-Z]/.test(ch)) {
+        const item = natoByLetter[ch];
+        if (item) arr.push(item.w.toUpperCase());
+      }
+    }
+    return arr;
+  }
+
+  function wordToPhoneticString(word) {
+    return wordToPhoneticArray(word).map(capWord).join(" ");
+  }
+
+  function randomWord() {
+    return WORDS[Math.floor(Math.random() * WORDS.length)];
+  }
+
+  function updateWordStats() {
+    wordScoreSpan.textContent = wordScore;
+    wordTotalSpan.textContent = wordTotal;
+    const acc = wordTotal ? Math.round(wordScore / wordTotal * 100) : 0;
+    wordAccuracySpan.textContent = acc + "%";
+  }
+
+  function speakPhonetic(word) {
+    const parts = wordToPhoneticArray(word).map(capWord).join(" ");
+    speak(parts);
+  }
+
+  function showWordAnswer() {
+    const phon = wordToPhoneticString(currentWord);
+    wordAnswerArea.innerHTML =
+      `Answer: <strong>${currentWord}</strong> → <strong>${phon}</strong>`;
+  }
+
+  function newWordQuestion() {
+    currentWord = randomWord();
+    wordDisplay.textContent = currentWord;
+    userWordInput.value = "";
+    wordFeedback.textContent = "";
+    wordFeedback.className = "feedback neutral";
+    wordAnswerArea.textContent = "";
+    wordDone = false;
+    wordNextBtn.disabled = true;
+    userWordInput.focus();
+  }
+
+  function checkWordAnswer() {
+    if (wordDone) return;
+    const target = currentWord.toUpperCase();
+
+    const expected = [];
+    for (const ch of target) {
+      if (/[A-Z]/.test(ch)) {
+        const item = natoByLetter[ch];
+        if (item) expected.push(item);
+      }
+    }
+
+    const raw = userWordInput.value.trim();
+    if (!raw) return;
+    const tokens = raw
+      .split(/[\s,;]+/)
+      .map(t => normalize(t))
+      .filter(Boolean);
+
+    let correctAll = true;
+    const perLetterFeedback = [];
+
+    if (tokens.length !== expected.length) {
+      correctAll = false;
+      perLetterFeedback.push(
+        `You used ${tokens.length} NATO words, but the word has ${expected.length} letters.`
+      );
+    }
+
+    const len = Math.min(tokens.length, expected.length);
+    for (let i = 0; i < len; i++) {
+      const token = tokens[i];
+      const exp = expected[i];
+      const variantsNorm = exp.v.map(v => normalize(v));
+      const ok = variantsNorm.includes(token);
+      if (!ok) {
+        correctAll = false;
+        perLetterFeedback.push(
+          `${target[i]} → expected something like ${capWord(exp.w)}, got "${tokens[i] || ""}"`
+        );
+      }
+    }
+
+    wordTotal++;
+    if (correctAll) {
+      wordScore++;
+      wordFeedback.textContent = "Correct! ✅";
+      wordFeedback.className = "feedback correct";
+    } else {
+      wordFeedback.textContent = "Not quite. Check the answer below.";
+      wordFeedback.className = "feedback incorrect";
+    }
+    updateWordStats();
+    showWordAnswer();
+
+    if (perLetterFeedback.length > 0) {
+      wordAnswerArea.innerHTML +=
+        "<br><br>" + perLetterFeedback.map(x => "• " + x).join("<br>");
+    }
+
+    wordDone = true;
+    wordNextBtn.disabled = false;
+
+    if (autoNextWord.checked) {
+      setTimeout(() => {
+        if (currentMode === "word") newWordQuestion();
+      }, 1500);
+    }
+  }
+
+  // Mode switching
+  function setMode(mode) {
+    currentMode = mode;
+    modeButtons.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.mode === mode);
+    });
+    if (mode === "letter") {
+      modeLetterSection.classList.add("active");
+      modeWordSection.classList.remove("active");
+      answerInput.focus({ preventScroll: false });
+    } else {
+      modeWordSection.classList.add("active");
+      modeLetterSection.classList.remove("active");
+      userWordInput.focus();
+    }
+  }
+
+  modeButtons.forEach(btn => {
+    btn.addEventListener("click", () => setMode(btn.dataset.mode));
+  });
+
+  // Voice recognition (word mode)
+  let recognition = null;
+  let recognizing = false;
+
+  function initVoice() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      voiceWordBtn.disabled = true;
+      voiceStatus.textContent = "Voice recognition not supported in this browser.";
+      return;
+    }
+    recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      recognizing = true;
+      voiceWordBtn.classList.add("listening");
+      voiceWordBtn.textContent = "🎙️ Listening…";
+      voiceStatus.textContent = "Listening… say the NATO words (e.g. Hotel Echo Lima Lima Oscar).";
+    };
+
+    recognition.onerror = (event) => {
+      recognizing = false;
+      voiceWordBtn.classList.remove("listening");
+      voiceWordBtn.textContent = "🎙️ Voice input";
+      voiceStatus.textContent = "Voice error: " + (event.error || "unknown");
+    };
+
+    recognition.onend = () => {
+      recognizing = false;
+      voiceWordBtn.classList.remove("listening");
+      voiceWordBtn.textContent = "🎙️ Voice input";
+      if (!userWordInput.value.trim()) {
+        voiceStatus.textContent = "Stopped. Tap again to speak.";
+      }
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      // Put/append transcript into textarea
+      const existing = userWordInput.value.trim();
+      const joiner = existing ? " " : "";
+      userWordInput.value = existing + joiner + transcript;
+      voiceStatus.textContent = `Heard: "${transcript}"`;
+    };
+
+    voiceStatus.textContent = "Tap 🎙️ and speak your NATO spelling.";
+  }
+
+  voiceWordBtn.addEventListener("click", () => {
+    if (!recognition) return;
+    if (!recognizing) {
+      try {
+        recognition.start();
+      } catch (e) {
+        // ignore "start" errors from fast taps
+      }
+    } else {
+      recognition.stop();
+    }
+  });
+
+  // Event handlers
+  checkBtn.addEventListener("click", () => checkLetterAnswer(false));
+  idkBtn.addEventListener("click", () => checkLetterAnswer(true));
+  nextBtn.addEventListener("click", () => newLetterQuestion());
+  resetBtn.addEventListener("click", () => {
+    stats = items.map(()=>({seen:0,correct:0}));
+    seen = 0;
+    correct = 0;
+    streak = 0;
+    feedbackEl.textContent = "Letter stats reset.";
+    feedbackEl.className = "feedback neutral";
+    answerEl.textContent = "";
+    saveState();
+    updateLetterStats();
+    refillCycle();
+    newLetterQuestion();
+  });
+  hearLetterBtn.addEventListener("click", () => {
+    const it = items[idx];
+    speak(it.w);
+  });
+
+  answerInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === "Go") {
+      if (!answered) checkLetterAnswer(false);
+      else newLetterQuestion();
+    }
+  });
+
+  toggleStatsBtn.addEventListener("click", () => {
+    const visible = statsPanel.style.display === "block";
+    statsPanel.style.display = visible ? "none" : "block";
+    toggleStatsBtn.textContent = visible ? "Show" : "Hide";
+  });
+
+  spellBtn.addEventListener("click", spellText);
+  spellInput.addEventListener("input", spellText);
+
+  // Word test events
+  wordCheckBtn.addEventListener("click", checkWordAnswer);
+  wordShowAnswerBtn.addEventListener("click", () => {
+    showWordAnswer();
+    wordDone = true;
+    wordNextBtn.disabled = false;
+    if (autoNextWord.checked) {
+      setTimeout(() => {
+        if (currentMode === "word") newWordQuestion();
+      }, 1500);
+    }
+  });
+  wordNextBtn.addEventListener("click", newWordQuestion);
+  hearWordBtn.addEventListener("click", () => {
+    if (!currentWord) return;
+    speakPhonetic(currentWord);
+  });
+
+  userWordInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!wordDone) checkWordAnswer();
+      else newWordQuestion();
+    }
+  });
+
+  // Init
+  loadState();
+  refillCycle();
+  updateLetterStats();
+  updateWordStats();
+  newLetterQuestion();
+  newWordQuestion();
+  initVoice();
+</script>
+</body>
+</html>

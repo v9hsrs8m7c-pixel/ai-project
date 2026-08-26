@@ -1,0 +1,2443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Variant Chess Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #94a3b8;
+            font-size: 1.1rem;
+        }
+
+        /* Cards */
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card h2 {
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Button */
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+        }
+
+        .btn-outline:hover {
+            background: #334155;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+
+        .btn-success {
+            background: #16a34a;
+        }
+
+        .btn-success:hover {
+            background: #15803d;
+        }
+
+        .btn-large {
+            padding: 2rem;
+            font-size: 1.5rem;
+            width: 100%;
+        }
+
+        .btn-gradient {
+            background: linear-gradient(to right, #2563eb, #7c3aed);
+        }
+
+        .btn-gradient:hover {
+            background: linear-gradient(to right, #1d4ed8, #6d28d9);
+        }
+
+        /* Variant Grid */
+        .variant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .variant-btn {
+            text-align: left;
+            padding: 1.25rem;
+            background: #334155;
+            border: 1px solid #475569;
+        }
+
+        .variant-btn:hover {
+            background: #475569;
+        }
+
+        .variant-name {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        .variant-desc {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        /* Game Builder */
+        .builder-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .input-group {
+            margin-bottom: 1rem;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #e2e8f0;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 0.75rem;
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            cursor: pointer;
+            margin: 0;
+        }
+
+        /* Game Board */
+        .game-layout {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .board-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chess-board {
+            display: inline-block;
+            border: 4px solid #475569;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .board-row {
+            display: flex;
+        }
+
+        .square {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.1s;
+            font-size: 2.5rem;
+            user-select: none;
+        }
+
+        .square.light {
+            background: #f0d9b5;
+        }
+
+        .square.dark {
+            background: #b58863;
+        }
+
+        .square.void {
+            background: #0f172a;
+            cursor: default;
+        }
+
+        .square.fog {
+            background: #1e293b;
+            color: #475569;
+            font-size: 1rem;
+        }
+
+        .square.selected {
+            box-shadow: inset 0 0 0 4px #facc15;
+        }
+
+        .square.highlighted {
+            box-shadow: inset 0 0 0 3px #22c55e;
+        }
+
+        .square.can-capture {
+            box-shadow: inset 0 0 0 3px #ef4444;
+        }
+
+        .square:hover:not(.void) {
+            filter: brightness(1.1);
+        }
+
+        .piece {
+            position: relative;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .piece.white {
+            color: #ffffff;
+            filter: drop-shadow(0 0 2px #000000);
+        }
+
+        .piece.black {
+            color: #000000;
+            filter: drop-shadow(0 0 2px #ffffff);
+        }
+
+        .piece.red {
+            color: #fbbf24;
+            filter: drop-shadow(0 0 2px #000000);
+        }
+
+        .piece.green {
+            color: #22c55e;
+            filter: drop-shadow(0 0 2px #000000);
+        }
+
+        .piece.petrified::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(107, 114, 128, 0.4);
+            border-radius: 50%;
+        }
+
+        .move-indicator {
+            width: 12px;
+            height: 12px;
+            background: #22c55e;
+            border-radius: 50%;
+            opacity: 0.6;
+        }
+
+        .duck {
+            font-size: 2rem;
+        }
+
+        /* Player Info */
+        .player-info {
+            background: #1e293b;
+            border: 2px solid #475569;
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .player-info.active {
+            background: #1e3a8a;
+            border-color: #3b82f6;
+        }
+
+        .player-info.eliminated {
+            opacity: 0.5;
+        }
+
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .player-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .player-status {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        /* Captured Pieces */
+        .captured-pieces {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .captured-title {
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .captured-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .captured-piece {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #334155;
+            border-radius: 6px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .captured-piece:hover {
+            background: #475569;
+            transform: scale(1.1);
+        }
+
+        .captured-piece.selected {
+            background: #3b82f6;
+        }
+
+
+        .player-top {
+            grid-column: 2;
+            grid-row: 1;
+        }
+
+        .player-left {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .board-center {
+            grid-column: 2;
+            grid-row: 2;
+        }
+
+        .player-right {
+            grid-column: 3;
+            grid-row: 2;
+        }
+
+        .player-bottom {
+            grid-column: 2;
+            grid-row: 3;
+        }
+
+        /* Controls */
+        .game-controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .game-status {
+            text-align: center;
+            padding: 1rem;
+            background: #1e293b;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .game-status.won {
+            background: #166534;
+            border: 2px solid #22c55e;
+        }
+
+        .game-status.duck-mode {
+            background: #854d0e;
+            border: 2px solid #fbbf24;
+        }
+
+        /* Features List */
+        .features-list {
+            list-style: none;
+        }
+
+        .features-list li {
+            padding: 0.5rem 0;
+            color: #cbd5e1;
+        }
+
+        .features-list li::before {
+            content: '✓ ';
+            color: #22c55e;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .game-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .builder-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .variant-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .screen.active {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .split-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .builder-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .rules-active {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script>
+        // ============================================================================
+        // GAME STATE & CONFIGURATION
+        // ============================================================================
+
+        const PIECE_SYMBOLS = {
+            'K': { white: '♔', black: '♚' },
+            'Q': { white: '♕', black: '♛' },
+            'R': { white: '♖', black: '♜' },
+            'B': { white: '♗', black: '♝' },
+            'N': { white: '♘', black: '♞' },
+            'P': { white: '♙', black: '♟' }
+        };
+
+        const PLAYER_COLORS = ['White', 'Black'];
+        const PLAYER_CSS_COLORS = ['white', 'black'];
+
+        let currentScreen = 'menu';
+        let gameState = null;
+        let gameConfig = null;
+        let selectedSquare = null;
+        let highlightedMoves = [];
+        let droppingPiece = null;
+
+        // ============================================================================
+        // VARIANT CONFIGURATIONS
+        // ============================================================================
+
+        const VARIANTS = {
+            classic: {
+                name: 'Classic Chess',
+                desc: 'Standard 8×8 chess with all traditional rules',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'standard'
+                }
+            },
+            chess960: {
+                name: 'Chess960 (castling bug)',
+                desc: 'Randomized back rank, adapted castling rules',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'chess960'
+                }
+            },
+            atomic: {
+                name: 'Atomic Chess',
+                desc: 'Captures cause explosions in adjacent squares',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: true, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'captureKing', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['captureKing', 'checkmate'], startingPosition: 'standard'
+                }
+            },
+            fogOfWar: {
+                name: 'Fog of War',
+                desc: 'Limited vision - see only where your pieces can move',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'captureKing', fogOfWar: true, fogRadius: 2
+                    },
+                    winConditions: ['captureKing'], startingPosition: 'standard'
+                }
+            },
+            crazyhouse: {
+                name: 'Crazyhouse',
+                desc: 'Captured pieces can be dropped back on the board',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: true,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'standard'
+                }
+            },
+            antichess: {
+                name: 'Antichess',
+                desc: 'Objective: lose all your pieces or get stalemated',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: true,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: false,
+                        promotion: true, checkRules: 'noCheck', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['loseAllPieces'], startingPosition: 'standard'
+                }
+            },
+            duckChess: {
+                name: 'Duck Chess',
+                desc: 'Shared rubber duck blocks squares after each move',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: true, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'captureKing', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['captureKing'], startingPosition: 'standard'
+                }
+            },
+            horde: {
+                name: 'Horde',
+                desc: 'White: 36 pawns vs Black: standard setup',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: false,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['horde'], startingPosition: 'horde'
+                }
+            },
+            kingOfTheHill: {
+                name: 'King of the Hill',
+                desc: 'Win by getting king to center or checkmate',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate', 'kingToCenter'], startingPosition: 'standard'
+                }
+            },
+            threeCheck: {
+                name: 'Three-Check',
+                desc: 'Win by checking opponent 3 times or checkmate',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate', 'threeChecks'], startingPosition: 'standard'
+                }
+            },
+            racingKings: {
+                name: 'Racing Kings',
+                desc: 'Race your king to the 8th rank first',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: false, castling: false,
+                        promotion: false, checkRules: 'illegalCheck', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['racingKings'], startingPosition: 'racingKings'
+                }
+            },
+            petrified: {
+                name: 'Petrified (to be fixed)',
+                desc: 'Pieces turn to stone after capturing',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: true, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'standard'
+                }
+            },
+            captureAnything: {
+                name: 'Capture Anything',
+                desc: 'Can capture your own pieces (except king)',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: true, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'standard'
+                }
+            },
+            torpedoChess: {
+                name: 'Torpedo Chess',
+                desc: 'Pawns can move 2 squares forward anytime',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: true, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'standard'
+                }
+            },
+            sidewaysPawns: {
+                name: 'Sideways Pawns',
+                desc: 'Pawns can also move left/right 1 square',
+                config: {
+                    boardWidth: 8, boardHeight: 8, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: true, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: false,
+                        duckChess: false, petrification: false, enPassant: true, castling: true,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'standard'
+                }
+            },
+            minihouse: {
+                name: 'Minihouse',
+                desc: 'Crazyhouse on a 6×6 board with reduced pieces',
+                config: {
+                    boardWidth: 6, boardHeight: 6, players: 2, voidSquares: [],
+                    rules: {
+                        sidewaysPawns: false, torpedoPawns: false, forcedCaptures: false,
+                        atomicExplosions: false, captureOwnPieces: false, pieceDrops: true,
+                        duckChess: false, petrification: false, enPassant: false, castling: false,
+                        promotion: true, checkRules: 'normal', fogOfWar: false, fogRadius: 0
+                    },
+                    winConditions: ['checkmate'], startingPosition: 'mini'
+                }
+            }
+        };
+
+        // ============================================================================
+        // BOARD INITIALIZATION
+        // ============================================================================
+
+        function initializeGame(config) {
+            const board = createBoard(config);
+            
+            gameState = {
+                board: board,
+                currentPlayer: 0,
+                players: Array.from({ length: config.players }, (_, i) => ({
+                    id: i,
+                    color: PLAYER_COLORS[i] || `Player ${i + 1}`,
+                    isEliminated: false,
+                    checksGiven: 0,
+                    capturedPieces: [],
+                    timeRemaining: 600000
+                })),
+                moveHistory: [],
+                duckPosition: null,
+                needsDuckMove: false,
+                gameOver: false,
+                winner: null,
+                enPassant: null,
+                lastEliminationBy: null,
+            };
+
+            gameConfig = config;
+            selectedSquare = null;
+            highlightedMoves = [];
+            droppingPiece = null;
+        }
+
+        function createBoard(config) {
+            const board = [];
+            
+            for (let y = 0; y < config.boardHeight; y++) {
+                const row = [];
+                for (let x = 0; x < config.boardWidth; x++) {
+                    const isVoid = config.voidSquares.some(([vx, vy]) => vx === x && vy === y);
+                    row.push(isVoid ? { type: 'void' } : null);
+                }
+                board.push(row);
+            }
+
+            if (config.startingPosition === 'standard') {
+                placeStandardPieces(board);
+            } else if (config.startingPosition === 'chess960') {
+                placeChess960Pieces(board);
+            } else if (config.startingPosition === 'horde') {
+                placeHordePieces(board);
+            } else if (config.startingPosition === 'racingKings') {
+                placeRacingKingsPieces(board);
+            } else if (config.startingPosition === 'mini') {
+                placeMiniPieces(board);
+            } else if (config.startingPosition === 'custom') {
+                if (Array.isArray(config.customSetup)) {
+                    for (const p of config.customSetup) {
+                        if (board[p.y] && typeof board[p.y][p.x] !== 'undefined') {
+                          board[p.y][p.x] = { type: p.type, player: p.player, hasMoved: !!p.hasMoved };
+                        }
+                    }
+                }
+            }
+            return board;
+        }
+
+        function placeStandardPieces(board) {
+            const backRank = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
+            for (let x = 0; x < 8; x++) {
+                board[0][x] = { type: backRank[x], player: 0, hasMoved: false };
+                board[1][x] = { type: 'P', player: 0, hasMoved: false };
+                board[6][x] = { type: 'P', player: 1, hasMoved: false };
+                board[7][x] = { type: backRank[x], player: 1, hasMoved: false };
+            }
+        }
+
+        function placeChess960Pieces(board) {
+            const backRank = generateChess960Position();
+            for (let x = 0; x < 8; x++) {
+                board[0][x] = { type: backRank[x], player: 0, hasMoved: false };
+                board[1][x] = { type: 'P', player: 0, hasMoved: false };
+                board[6][x] = { type: 'P', player: 1, hasMoved: false };
+                board[7][x] = { type: backRank[x], player: 1, hasMoved: false };
+            }
+        }
+
+        function generateChess960Position() {
+            const pos = Array(8).fill('');
+            const light = [1, 3, 5, 7];
+            const dark = [0, 2, 4, 6];
+        
+            // 1. Bishops on opposite colors
+            pos[light[Math.floor(Math.random() * 4)]] = 'B';
+            pos[dark[Math.floor(Math.random() * 4)]] = 'B';
+        
+            // 2. Place queen randomly among empty squares
+            let empty = pos.map((p, i) => p === '' ? i : -1).filter(i => i >= 0);
+            pos[empty[Math.floor(Math.random() * empty.length)]] = 'Q';
+        
+            // 3. Place knights randomly among remaining empty squares
+            empty = pos.map((p, i) => p === '' ? i : -1).filter(i => i >= 0);
+            for (let i = 0; i < 2; i++) {
+                const idx = Math.floor(Math.random() * empty.length);
+                pos[empty[idx]] = 'N';
+                empty.splice(idx, 1);
+            }
+        
+            // 4. Place rooks and king: must have R-K-R order
+            // Three remaining empty squares
+            empty = pos.map((p, i) => p === '' ? i : -1).filter(i => i >= 0);
+            empty.sort((a, b) => a - b);
+            const [a, b, c] = empty;
+            // always R-K-R
+            pos[a] = 'R';
+            pos[b] = 'K';
+            pos[c] = 'R';
+        
+            return pos;
+        }
+
+        function placeHordePieces(board) {
+            const backRank = ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'];
+            for (let x = 0; x < 8; x++) {
+                board[6][x] = { type: 'P', player: 1, hasMoved: false };
+                board[7][x] = { type: backRank[x], player: 1, hasMoved: false };
+            }
+            
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 8; x++) {
+                    board[y][x] = { type: 'P', player: 0, hasMoved: false };
+                }
+            }
+            board[4][1] = { type: 'P', player: 0, hasMoved: false };
+            board[4][2] = { type: 'P', player: 0, hasMoved: false };
+            board[4][5] = { type: 'P', player: 0, hasMoved: false };
+            board[4][6] = { type: 'P', player: 0, hasMoved: false };
+
+
+
+        }
+
+        function placeRacingKingsPieces(board) {
+            board[0][0] = { type: 'Q', player: 0, hasMoved: false };
+            board[0][1] = { type: 'R', player: 0, hasMoved: false };
+            board[0][2] = { type: 'B', player: 0, hasMoved: false };
+            board[0][3] = { type: 'N', player: 0, hasMoved: false };
+            board[0][4] = { type: 'N', player: 1, hasMoved: false };
+            board[0][5] = { type: 'B', player: 1, hasMoved: false };
+            board[0][6] = { type: 'R', player: 1, hasMoved: false };
+            board[0][7] = { type: 'Q', player: 1, hasMoved: false };
+            board[1][0] = { type: 'K', player: 0, hasMoved: false };
+            board[1][1] = { type: 'R', player: 0, hasMoved: false };
+            board[1][2] = { type: 'B', player: 0, hasMoved: false };
+            board[1][3] = { type: 'N', player: 0, hasMoved: false };
+            board[1][4] = { type: 'N', player: 1, hasMoved: false };
+            board[1][5] = { type: 'B', player: 1, hasMoved: false };
+            board[1][6] = { type: 'R', player: 1, hasMoved: false };
+            board[1][7] = { type: 'K', player: 1, hasMoved: false };
+        }
+
+
+
+        function placeMiniPieces(board) {
+            board[0][0] = { type: 'K', player: 0, hasMoved: false };
+            board[0][1] = { type: 'R', player: 0, hasMoved: false };
+            board[0][2] = { type: 'N', player: 0, hasMoved: false };
+            board[0][3] = { type: 'B', player: 0, hasMoved: false };
+            board[1][0] = { type: 'P', player: 0, hasMoved: false };
+            board[4][5] = { type: 'P', player: 1, hasMoved: false };
+            board[5][2] = { type: 'B', player: 1, hasMoved: false };
+            board[5][3] = { type: 'N', player: 1, hasMoved: false };
+            board[5][4] = { type: 'R', player: 1, hasMoved: false };
+            board[5][5] = { type: 'K', player: 1, hasMoved: false };
+        }
+
+        // ============================================================================
+        // MOVE LOGIC
+        // ============================================================================
+
+        function getPossibleMoves(x, y, opts = {}) {
+          // opts: { forAttack?: boolean, forVision?: boolean, skipLegality?: boolean }
+          const piece = gameState.board[y][x];
+          if (!piece || piece.type === 'void') return [];
+        
+          let moves = [];
+          switch (piece.type) {
+            case 'P': moves = getPawnMoves(x, y); break;
+            case 'N': moves = getKnightMoves(x, y); break;
+            case 'B': moves = getBishopMoves(x, y); break;
+            case 'R': moves = getRookMoves(x, y); break;
+            case 'Q': moves = getQueenMoves(x, y); break;
+            case 'K': moves = getKingMoves(x, y, opts); break; // pass opts
+          }
+        
+          // Duck still blocks normal movement; for attacks/vision you may choose to ignore it.
+          if (!opts.forAttack) {
+            if (gameState.duckPosition) {
+              const [dx, dy] = gameState.duckPosition;
+              moves = moves.filter(([mx, my]) => mx !== dx || my !== dy);
+            }
+          }
+        
+          // Forced captures still okay in normal generation
+          if (gameConfig.rules.forcedCaptures && !opts.forAttack && !opts.forVision) {
+            const captureMoves = moves.filter(([mx, my]) => {
+              const target = gameState.board[my]?.[mx];
+              return target && target.type !== 'void' && target.player !== piece.player;
+            });
+            if (captureMoves.length > 0) return captureMoves;
+          }
+        
+          // Skip legality checks for attack/vision to avoid recursion & heavy compute
+          if (opts.skipLegality || opts.forAttack || opts.forVision || gameConfig.rules.checkRules === 'noCheck') {
+            return moves;
+          }
+        
+          // Normal legality filtering
+          const rule = gameConfig.rules.checkRules; // 'normal' | 'captureKing' | 'noCheck' | 'illegalCheck'
+          if (rule !== 'noCheck') {
+            const filtered = [];
+            for (const [mx, my, extra] of moves) {
+              const boardCopy = cloneBoard(gameState.board);
+              boardCopy[my][mx] = { ...piece, hasMoved: true };
+              boardCopy[y][x] = null;
+        
+              if (rule === 'normal' || rule === 'illegalCheck') {
+                if (isOwnKingInCheck(boardCopy, piece.player)) continue;
+              }
+              if (rule === 'illegalCheck') {
+                if (wouldGiveCheck(boardCopy, piece.player)) continue;
+              }
+              filtered.push([mx, my, extra]);
+            }
+            return filtered;
+          }
+        
+          return moves;
+        }
+        
+        function getKingMoves(x, y, opts = {}) {
+          const piece = gameState.board[y][x];
+          if (piece.petrified) return [];
+          const moves = [];
+          const offsets = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+          for (const [dx, dy] of offsets) {
+            const nx = x + dx, ny = y + dy;
+            if (canMoveTo(nx, ny, piece.player)) moves.push([nx, ny]);
+          }
+          // Only consider castling for *normal* move gen; skip for attacks/vision
+          if (!opts.forAttack && !opts.forVision) addCastlingMovesForKing(x, y, moves);
+          return moves;
+        }
+
+        function getPawnMoves(x, y) {
+            const piece = gameState.board[y][x];
+            const moves = [];
+            const forward = piece.player === 0 ? 1 : -1;
+            const newY = y + forward;
+            
+            // En Passant (only if rule is enabled)
+            if (gameConfig.rules.enPassant && gameState.enPassant) {
+              const ep = gameState.enPassant;
+              const forward = piece.player === 0 ? 1 : -1;
+              const targetY = y + forward;
+            
+              // Only on the immediate next move by the *opponent*
+              const isImmediate = (gameState.moveHistory.length + 1) === ep.turn + 1;
+              const epOwnerIsOpponent = ep.byPlayer !== piece.player;
+            
+              if (isImmediate && epOwnerIsOpponent && targetY === ep.y) {
+                for (const dx of [-1, 1]) {
+                  const newX = x + dx;
+                  if (newX === ep.x && isValidSquare(newX, targetY) && !gameState.board[targetY][newX]) {
+                    // encode special payload so makeMove knows this was en passant
+                    moves.push([newX, targetY, { enPassant: { captureX: ep.x, captureY: y } }]);
+                  }
+                }
+              }
+            }
+            
+            if (newY >= 0 && newY < gameState.board.length) {
+                const target = gameState.board[newY]?.[x];
+                if (!target) {
+                    moves.push([x, newY]);
+
+                    const startRank = piece.player === 0 ? 1 : gameState.board.length - 2;
+                    if ((!piece.hasMoved && y === startRank) || gameConfig.rules.torpedoPawns) {
+                        const newY2 = y + forward * 2;
+                        const target2 = gameState.board[newY2]?.[x];
+                        const between = gameState.board[newY]?.[x];
+                        if (!target2 && !between && newY2 >= 0 && newY2 < gameState.board.length) {
+                            moves.push([x, newY2]);
+                        }
+                    }
+                }
+            }
+
+            for (const dx of [-1, 1]) {
+                const newX = x + dx;
+                const newY = y + forward;
+                if (newX >= 0 && newX < gameState.board[0].length && newY >= 0 && newY < gameState.board.length) {
+                    const target = gameState.board[newY]?.[newX];
+                    if (target && target.type !== 'void') {
+                        if (target.player !== piece.player || 
+                            (gameConfig.rules.captureOwnPieces && target.type !== 'K')) {
+                            moves.push([newX, newY]);
+                        }
+                    }
+                }
+            }
+
+            if (gameConfig.rules.sidewaysPawns) {
+                for (const dx of [-1, 1]) {
+                    const newX = x + dx;
+                    if (newX >= 0 && newX < gameState.board[0].length) {
+                        const target = gameState.board[y]?.[newX];
+                        if (!target) {
+                            moves.push([newX, y]);
+                        }
+                    }
+                }
+            }
+
+            return moves.filter(([mx, my]) => isValidSquare(mx, my));
+        }
+
+        function getKnightMoves(x, y) {
+            const piece = gameState.board[y][x];
+            if (piece.petrified) return [];
+
+            const moves = [];
+            const offsets = [
+                [2, 1], [2, -1], [-2, 1], [-2, -1],
+                [1, 2], [1, -2], [-1, 2], [-1, -2]
+            ];
+
+            for (const [dx, dy] of offsets) {
+                const newX = x + dx;
+                const newY = y + dy;
+                if (canMoveTo(newX, newY, piece.player)) {
+                    moves.push([newX, newY]);
+                }
+            }
+
+            return moves;
+        }
+
+        function getBishopMoves(x, y) {
+            const piece = gameState.board[y][x];
+            if (piece.petrified) return [];
+            return getSlidingMoves(x, y, [[1, 1], [1, -1], [-1, 1], [-1, -1]]);
+        }
+
+        function getRookMoves(x, y) {
+            const piece = gameState.board[y][x];
+            if (piece.petrified) return [];
+            return getSlidingMoves(x, y, [[1, 0], [-1, 0], [0, 1], [0, -1]]);
+        }
+
+        function getQueenMoves(x, y) {
+            const piece = gameState.board[y][x];
+            if (piece.petrified) return [];
+            return getSlidingMoves(x, y, [
+                [1, 1], [1, -1], [-1, 1], [-1, -1],
+                [1, 0], [-1, 0], [0, 1], [0, -1]
+            ]);
+        }
+
+        function getSlidingMoves(x, y, directions) {
+            const piece = gameState.board[y][x];
+            const moves = [];
+
+            for (const [dx, dy] of directions) {
+                let newX = x + dx;
+                let newY = y + dy;
+
+                while (isValidSquare(newX, newY)) {
+                    const target = gameState.board[newY][newX];
+                    
+                    if (!target) {
+                        moves.push([newX, newY]);
+                    } else if (target.type === 'void') {
+                        break;
+                    } else {
+                        if (target.player !== piece.player || 
+                            (gameConfig.rules.captureOwnPieces && target.type !== 'K')) {
+                            if (!target.petrified) {
+                                moves.push([newX, newY]);
+                            }
+                        }
+                        break;
+                    }
+
+                    newX += dx;
+                    newY += dy;
+                }
+            }
+
+            return moves;
+        }
+
+        function isValidSquare(x, y) {
+            if (y < 0 || y >= gameState.board.length) return false;
+            if (x < 0 || x >= gameState.board[0].length) return false;
+            const square = gameState.board[y][x];
+            if (square && square.type === 'void') return false;
+            if (gameState.duckPosition && gameState.duckPosition[0] === x && gameState.duckPosition[1] === y) {
+                return false;
+            }
+            return true;
+        }
+
+        function canMoveTo(x, y, player) {
+            if (!isValidSquare(x, y)) return false;
+            const target = gameState.board[y][x];
+            if (!target) return true;
+            if (target.type === 'void') return false;
+            if (target.petrified) return false;
+            if (target.player === player) {
+                return gameConfig.rules.captureOwnPieces && target.type !== 'K';
+            }
+            return true;
+        }
+        
+        function cloneBoard(board) {
+          return board.map(row => row.map(cell => cell ? { ...cell } : null));
+        }
+        
+        function findKing(board, player) {
+          for (let y = 0; y < board.length; y++) {
+            for (let x = 0; x < board[y].length; x++) {
+              const p = board[y][x];
+              if (p && p.type === 'K' && p.player === player) return [x, y];
+            }
+          }
+          return null;
+        }
+        
+        // 1) Safe attack detector (no recursion, no castling)
+        function isSquareAttacked(board, x, y, byPlayer) {
+          const H = board.length, W = board[0].length;
+          const inside = (xx, yy) => xx >= 0 && xx < W && yy >= 0 && yy < H;
+        
+          // Knight offsets
+          const KNO = [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
+        
+          // 1. Knights
+          for (const [dx, dy] of KNO) {
+            const xx = x + dx, yy = y + dy;
+            if (!inside(xx, yy)) continue;
+            const p = board[yy][xx];
+            if (p && p.type !== 'void' && p.player === byPlayer && p.type === 'N') return true;
+          }
+        
+          // 2. Kings (adjacent squares only — NO castling)
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+              if (!dx && !dy) continue;
+              const xx = x + dx, yy = y + dy;
+              if (!inside(xx, yy)) continue;
+              const p = board[yy][xx];
+              if (p && p.type !== 'void' && p.player === byPlayer && p.type === 'K') return true;
+            }
+          }
+        
+          // 3. Pawns (attack diagonals only)
+          const pawnDir = byPlayer === 0 ? 1 : -1;
+          for (const dx of [-1, 1]) {
+            const xx = x + dx, yy = y - pawnDir; // inverse: attackers would be 1 step behind the target
+            if (!inside(xx, yy)) continue;
+            const p = board[yy][xx];
+            if (p && p.type !== 'void' && p.player === byPlayer && p.type === 'P') return true;
+          }
+        
+          // sliding helper
+          const ray = (dirs, types) => {
+            for (const [dx, dy] of dirs) {
+              let xx = x + dx, yy = y + dy;
+              while (inside(xx, yy)) {
+                // If you want the duck to block attacks, uncomment this:
+                // if (gameState?.duckPosition && gameState.duckPosition[0] === xx && gameState.duckPosition[1] === yy) break;
+        
+                const p = board[yy][xx];
+                if (!p) { xx += dx; yy += dy; continue; }
+                if (p.type === 'void') break;
+                if (p.player === byPlayer && types.has(p.type)) return true;
+                break; // blocked by any piece
+              }
+            }
+            return false;
+          };
+        
+          // 4. Bishops/Queens (diagonals)
+          if (ray([[1,1],[1,-1],[-1,1],[-1,-1]], new Set(['B','Q']))) return true;
+        
+          // 5. Rooks/Queens (orthogonals)
+          if (ray([[1,0],[-1,0],[0,1],[0,-1]], new Set(['R','Q']))) return true;
+        
+          return false;
+        }
+        
+        function hasAnyCaptureMoves(player) {
+          for (let y = 0; y < gameState.board.length; y++) {
+            for (let x = 0; x < gameState.board[0].length; x++) {
+              const p = gameState.board[y][x];
+              if (!p || p.type === 'void' || p.player !== player) continue;
+              const moves = getPossibleMoves(x, y);
+              if (moves.some(([mx, my]) => {
+                const t = gameState.board[my]?.[mx];
+                return t && t.type !== 'void' && t.player !== player;
+              })) return true;
+            }
+          }
+          return false;
+        }
+        
+        function hasAnyLegalMove(player) {
+          for (let y = 0; y < gameState.board.length; y++) {
+            for (let x = 0; x < gameState.board[0].length; x++) {
+              const p = gameState.board[y][x];
+              if (!p || p.type === 'void' || p.player !== player) continue;
+              const moves = getPossibleMoves(x, y);
+              if (moves.length > 0) return true;
+            }
+          }
+          return false;
+        }
+        
+        function isLegalDropSquare(x, y) {
+          if (!isValidSquare(x, y)) return false;
+          if (gameState.board[y][x]) return false; // occupied
+          if (gameState.duckPosition && gameState.duckPosition[0] === x && gameState.duckPosition[1] === y) return false;
+          return true;
+        }
+        
+        function choosePromotionType(playerId) {
+          // Standard choices
+          let choices = ['Q', 'R', 'B', 'N'];
+        
+          // Antichess / noCheck: allow promote to King
+          const isAnti = gameConfig.winConditions.includes('loseAllPieces') || gameConfig.rules.checkRules === 'noCheck';
+          if (isAnti) choices = ['Q', 'R', 'B', 'N', 'K'];
+        
+          const promptText = `Promote pawn to (${choices.join(', ')}):`;
+          let ans = (window.prompt(promptText, choices[0]) || '').toUpperCase().trim();
+        
+          if (!choices.includes(ans)) ans = choices[0];
+          return ans;
+        }
+        
+        // Check drop legality vs check rules
+        function isDropPositionLegalForRules(x, y, dropPiece, player) {
+          const rule = gameConfig.rules.checkRules; // 'normal' | 'captureKing' | 'noCheck' | 'illegalCheck'
+          if (rule === 'noCheck') return true; // no legality checks
+        
+          // simulate the drop
+          const boardCopy = cloneBoard(gameState.board);
+          boardCopy[y][x] = { ...dropPiece, player, hasMoved: true };
+        
+          // 1) your king cannot be in check after the drop (normal+illegalCheck)
+          if (rule === 'normal' || rule === 'illegalCheck') {
+            if (isOwnKingInCheck(boardCopy, player)) return false;
+          }
+        
+          // 2) for illegalCheck, the move cannot GIVE check
+          if (rule === 'illegalCheck') {
+            if (wouldGiveCheck(boardCopy, player)) return false;
+          }
+        
+          return true;
+        }
+        
+        function wouldGiveCheck(board, moverPlayer) {
+          const opp = (moverPlayer + 1) % gameConfig.players;
+          const k = findKing(board, opp);
+          if (!k) return false;
+          return isSquareAttacked(board, k[0], k[1], moverPlayer);
+        }
+        
+        function isOwnKingInCheck(board, player) {
+          const k = findKing(board, player);
+          if (!k) return false;
+          const opp = (player + 1) % gameConfig.players;
+          return isSquareAttacked(board, k[0], k[1], opp);
+        }
+        
+        function addCastlingMovesForKing(x, y, moves) {
+          if (!gameConfig.rules.castling) return;
+        
+          const king = gameState.board[y][x];
+          if (!king || king.type !== 'K' || king.hasMoved) return;
+        
+          const files = gameState.board[0].length; // assume 8
+          const rank = y;
+        
+          // Find eligible rooks on same rank
+          const rooks = [];
+          for (let fx = 0; fx < files; fx++) {
+            const p = gameState.board[rank][fx];
+            if (p && p.type === 'R' && p.player === king.player && !p.hasMoved) rooks.push(fx);
+          }
+        
+          // Fixed final squares (standard & Chess960)
+          const shortDestKingX = 6, shortDestRookX = 5; // O-O => Kg, Rf
+          const longDestKingX  = 2, longDestRookX  = 3; // O-O-O => Kc, Rd
+        
+          const isEmptyOrIs = (xx, yy, allowSquares) => {
+            const t = gameState.board[yy][xx];
+            if (!t) return true;
+            // allow the king/rook themselves to "occupy" their own destination squares in 960 edge cases
+            return allowSquares.some(([ax, ay]) => ax === xx && ay === yy);
+          };
+        
+          const tryCastle = (rookX, kingDestX, rookDestX) => {
+            // 1) Squares between king and rook must be empty (excluding their squares)
+            const step = Math.sign(rookX - x);
+            for (let cx = x + step; cx !== rookX; cx += step) {
+              if (gameState.board[rank][cx]) return;
+            }
+        
+            // 2) King path squares must be empty (except possibly rook start) and not attacked (normal/illegalCheck)
+            const kStep = Math.sign(kingDestX - x);
+            const allowOccupied = [
+              [x, rank],         // king start
+              [rookX, rank],     // rook start
+            ];
+        
+            // squares the king "touches": from start to dest, inclusive
+            for (let cx = x; ; cx += kStep || 1) {
+              // If king doesn't move (kStep==0), we still must check the current square once.
+              const boardSquareOk = isEmptyOrIs(cx, rank, allowOccupied);
+              if (!boardSquareOk) return;
+        
+              if (gameConfig.rules.checkRules === 'normal' || gameConfig.rules.checkRules === 'illegalCheck') {
+                // simulate king on cx
+                const boardCopy = cloneBoard(gameState.board);
+        
+                // remove king from original spot
+                boardCopy[rank][x] = null;
+        
+                // place king at cx
+                boardCopy[rank][cx] = { ...king, hasMoved: true };
+        
+                // (rook stays put during check test; that is fine for path attack validation)
+                if (isOwnKingInCheck(boardCopy, king.player)) return;
+              }
+        
+              if (cx === kingDestX) break;
+              if (kStep === 0) break;
+            }
+        
+            // 3) Final squares must be empty unless occupied by the moving king/rook themselves
+            const allowFinal = [
+              [x, rank],       // king start might equal kingDest
+              [rookX, rank],   // rook start might equal rookDest or kingDest
+            ];
+            if (!isEmptyOrIs(kingDestX, rank, allowFinal)) return;
+            if (!isEmptyOrIs(rookDestX, rank, allowFinal)) return;
+        
+            moves.push([kingDestX, rank, { castle: { rookFromX: rookX, rookToX: rookDestX } }]);
+          };
+        
+          for (const rx of rooks) {
+            if (rx > x) tryCastle(rx, shortDestKingX, shortDestRookX); // kingside
+            if (rx < x) tryCastle(rx, longDestKingX,  longDestRookX);  // queenside
+          }
+        }
+        
+        function advanceTurnSkippingEliminated() {
+          gameState.currentPlayer = (gameState.currentPlayer + 1) % gameConfig.players;
+          while (
+            gameState.players[gameState.currentPlayer].isEliminated &&
+            gameState.players.filter(p => !p.isEliminated).length > 1
+          ) {
+            gameState.currentPlayer = (gameState.currentPlayer + 1) % gameConfig.players;
+          }
+        }
+
+        function makeMove(fromX, fromY, toX, toY) {
+          const piece = gameState.board[fromY][fromX];
+        
+          // We'll look up the exact highlighted move (to get extra payload like castle/enPassant)
+          const chosen = highlightedMoves.find(([mx, my]) => mx === toX && my === toY);
+        
+          // Move the piece to target square (temporarily; we may adjust capture handling below)
+          let captured = gameState.board[toY][toX];
+          gameState.board[toY][toX] = { ...piece, hasMoved: true };
+          gameState.board[fromY][fromX] = null;
+        
+          // 🔹 Clear any previous EP target at the start of a move
+          gameState.enPassant = null;
+        
+          // ---------------------------------------------------------------------------
+          // CASTLING (if present in the chosen move’s extra payload)
+          // ---------------------------------------------------------------------------
+          const extra = chosen && chosen[2] ? chosen[2] : undefined;
+
+          // If castling, capture rook now (before king move overwrites squares)
+          let rookForCastle = null;
+          if (piece && piece.type === 'K' && extra?.castle) {
+          rookForCastle = gameState.board[fromY][extra.castle.rookFromX];
+          }
+          if (piece.type === 'K' && extra?.castle) {
+            const { rookFromX, rookToX } = extra.castle;
+            const rook = rookForCastle;
+            if (rook && rook.type === 'R') {
+              // remove rook from its start
+              gameState.board[toY][rookFromX] = null;
+              // place rook at destination
+              gameState.board[toY][rookToX] = { ...rook, hasMoved: true };
+            }
+          }
+
+          // ---------------------------------------------------------------------------
+          // EN PASSANT (captured pawn is not on (toX,toY); adjust explosion center)
+          // ---------------------------------------------------------------------------
+          let explosionCenter = [toX, toY]; // default for normal captures
+          if (extra?.enPassant) {
+            const { captureX, captureY } = extra.enPassant;
+            const epPawn = gameState.board[captureY]?.[captureX];
+            if (epPawn && epPawn.type === 'P' && epPawn.player !== piece.player) {
+              // Remove the passed pawn
+              captured = epPawn;
+              gameState.board[captureY][captureX] = null;
+              // 🔹 For Atomic, explosion originates from the captured pawn’s square
+              explosionCenter = [captureX, captureY];
+            }
+          }
+        
+          // ---------------------------------------------------------------------------
+          // CAPTURE handling (Crazyhouse pockets, Atomic explosions, Petrification)
+          // ---------------------------------------------------------------------------
+          if (captured && captured.type !== 'void') {
+            // Crazyhouse: pocket captured piece (except king)
+            if (gameConfig.rules.pieceDrops && captured.type !== 'K') {
+              gameState.players[piece.player].capturedPieces.push({
+                ...captured,
+                player: piece.player
+              });
+            }
+        
+            // Atomic: explode non-pawns around the explosion center
+            if (gameConfig.rules.atomicExplosions) {
+              const [cx, cy] = explosionCenter;
+              for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                  const ex = cx + dx;
+                  const ey = cy + dy;
+                  if (
+                    ey >= 0 && ey < gameState.board.length &&
+                    ex >= 0 && ex < gameState.board[0].length
+                  ) {
+                    const t = gameState.board[ey][ex];
+                    if (t && t.type !== 'void' && t.type !== 'P') {
+                      if (t.type === 'K') {
+                        gameState.players[t.player].isEliminated = true;
+                        // 🔹 Attribute elimination to the mover
+                        gameState.lastEliminationBy = piece.player;
+                      }
+                      gameState.board[ey][ex] = null;
+                    }
+                  }
+                }
+              }
+            }
+        
+            // Petrification: the *mover* petrifies if they captured
+            if (gameConfig.rules.petrification) {
+              const movedPiece = gameState.board[toY][toX];
+              if (movedPiece) movedPiece.petrified = true;
+            }
+        
+            // Normal king capture
+            if (captured.type === 'K') {
+              gameState.players[captured.player].isEliminated = true;
+              // 🔹 Attribute elimination to the mover
+              gameState.lastEliminationBy = piece.player;
+            }
+          }
+        
+          // ---------------------------------------------------------------------------
+          // PROMOTION
+          // ---------------------------------------------------------------------------
+          if (piece.type === 'P' && gameConfig.rules.promotion) {
+            const promotionRank = piece.player === 0 ? gameConfig.boardHeight - 1 : 0;
+            if (toY === promotionRank) {
+              const newType = choosePromotionType(piece.player);
+              gameState.board[toY][toX].type = newType;
+            }
+          }
+        
+          // ---------------------------------------------------------------------------
+          // 🔹 EN PASSANT TARGET setup (two-step pawn push)
+          // ---------------------------------------------------------------------------
+          if (piece.type === 'P') {
+            const dy = toY - fromY;
+            const forward = piece.player === 0 ? 1 : -1;
+            if (dy === 2 * forward && !gameConfig.rules.sidewaysPawns) {
+              // The square the pawn passed over
+              gameState.enPassant = {
+                x: toX,
+                y: fromY + forward,
+                byPlayer: piece.player,
+                // turn index (next move number is moveHistory.length + 1; EP available only immediately)
+                turn: gameState.moveHistory.length + 1
+              };
+            }
+          }
+        
+          // ---------------------------------------------------------------------------
+          // 🔹 THREE-CHECK counter (optional; if you use that win condition)
+          // ---------------------------------------------------------------------------
+          const mover = piece.player;
+          const opp = (mover + 1) % gameConfig.players;
+          if (
+            gameConfig.winConditions.includes('threeChecks') &&
+            (gameConfig.rules.checkRules === 'normal' || gameConfig.rules.checkRules === 'illegalCheck')
+          ) {
+            if (isOwnKingInCheck(gameState.board, opp)) {
+              gameState.players[mover].checksGiven += 1;
+            }
+          }
+        
+          // Record the move
+          gameState.moveHistory.push({ from: [fromX, fromY], to: [toX, toY], piece, captured });
+        
+          // Duck rules: after a piece move, same player must place the duck; otherwise pass turn
+          if (gameConfig.rules.duckChess) {
+            gameState.needsDuckMove = true; // piece+duck = one move by the same player
+          } else {
+            advanceTurnSkippingEliminated();
+          }
+        
+          // Clear UI state
+          selectedSquare = null;
+          highlightedMoves = [];
+        }
+
+        function checkWinConditions() {
+            const activePlayers = gameState.players.filter(p => !p.isEliminated);
+
+            if (gameConfig.winConditions.includes('lastPlayerStanding') && activePlayers.length === 1) {
+                return activePlayers[0].id;
+            }
+
+            if (gameConfig.winConditions.includes('threeChecks')) {
+                for (const player of gameState.players) {
+                    if (player.checksGiven >= 3) return player.id;
+                }
+            }
+
+            if (gameConfig.winConditions.includes('kingToCenter')) {
+              const W = gameConfig.boardWidth, H = gameConfig.boardHeight;
+              const cx = [Math.floor((W-1)/2), Math.ceil((W-1)/2)];
+              const cy = [Math.floor((H-1)/2), Math.ceil((H-1)/2)];
+              for (const x of cx) for (const y of cy) {
+                const sq = gameState.board[y]?.[x];
+                if (sq && sq.type === 'K') return sq.player;
+              }
+            }
+
+            if (gameConfig.winConditions.includes('racingKings')) {
+              const lastRank = gameConfig.boardHeight - 1;
+              for (let x = 0; x < gameState.board[0].length; x++) {
+                const sq = gameState.board[lastRank][x];
+                if (sq && sq.type === 'K') return sq.player;
+              }
+            }
+
+            if (gameConfig.winConditions.includes('captureKing')) {
+              if (gameState.players.some(p => p.isEliminated)) {
+                return gameState.lastEliminationBy ?? ((gameState.currentPlayer - 1 + gameConfig.players) % gameConfig.players);
+              }
+            }
+            
+            if (gameConfig.winConditions.includes('loseAllPieces')) {
+              // Win if you have no pieces
+              for (let pid = 0; pid < gameConfig.players; pid++) {
+                if (!hasPieces(pid)) return pid;
+              }
+            
+              // Win if you stalemate your opponent (opponent to move has no legal moves)
+              const current = gameState.currentPlayer;
+              if (!hasAnyLegalMove(current)) {
+                const other = (current + 1) % gameConfig.players;
+                return other; // current player is stalemated -> other wins
+              }
+            }
+
+
+            return null;
+        }
+
+        function hasPieces(player) {
+            for (let y = 0; y < gameState.board.length; y++) {
+                for (let x = 0; x < gameState.board[y].length; x++) {
+                    const piece = gameState.board[y][x];
+                    if (piece && piece.type !== 'void' && piece.player === player) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        function isSquareVisible(x, y, player) {
+          if (!gameConfig.rules.fogOfWar) return true;
+        
+          for (let py = 0; py < gameState.board.length; py++) {
+            for (let px = 0; px < gameState.board[py].length; px++) {
+              const piece = gameState.board[py][px];
+              if (!piece || piece.type === 'void' || piece.player !== player) continue;
+        
+              if (px === x && py === y) return true;
+        
+              const moves = getPossibleMoves(px, py, { forVision: true, skipLegality: true });
+              for (const [mx, my] of moves) {
+                if (mx === x && my === y) return true;
+              }
+            }
+          }
+          return false;
+        }
+
+        // ============================================================================
+        // UI RENDERING
+        // ============================================================================
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (currentScreen === 'menu') {
+                app.innerHTML = renderMainMenu();
+            } else if (currentScreen === 'builder') {
+                app.innerHTML = renderGameBuilder();
+                attachBuilderListeners();
+            } else if (currentScreen === 'game') {
+                app.innerHTML = renderGameBoard();
+                attachGameListeners();
+            }
+        }
+
+        function renderMainMenu() {
+            const variantButtons = Object.entries(VARIANTS).map(([id, variant]) => `
+                <button class="btn variant-btn" onclick="startQuickGame('${id}')">
+                    <div class="variant-name">${variant.name}</div>
+                    <div class="variant-desc">${variant.desc}</div>
+                </button>
+            `).join('');
+
+            return `
+                <div class="container">
+                    <div class="header">
+                        <h1>♔ Multi-Variant Chess Game ♚</h1>
+                        <p>20+ chess variants with customizable rules and board editor</p>
+                    </div>
+
+                    <div class="card">
+                        <h2>Quick Play - Select Variant</h2>
+                        <div class="variant-grid">
+                            ${variantButtons}
+                        </div>
+                    </div>
+
+                    <div class="split-grid">
+                        <div class="card">
+                            <button class="btn btn-large btn-gradient" onclick="goToBuilder()">
+                                🎨 Custom Game Builder
+                            </button>
+                            <p style="text-align: center; margin-top: 1rem; color: #94a3b8;">
+                                Create your own variant with custom rules, board size, and starting position
+                            </p>
+                        </div>
+
+                        <div class="card">
+                            <h3>Features</h3>
+                            <ul class="features-list">
+                                <li>20+ pre-configured game variants</li>
+                                <li>Modular rule system with toggles</li>
+                                <li>Custom board sizes (5×5 to 16×16)</li>
+                                <li>Board editor with void squares</li>
+                                <li>2-player mode</li>
+                                <li>Multiple win conditions</li>
+                                <li>Special mechanics (Fog of War, Atomic, etc.)</li>
+                                <li>Piece drops (Crazyhouse)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        let builderBoard = null;
+        
+        function makeEmptyBuilderBoard(w, h){
+            return Array.from({length: h}, () => Array.from({length: w}, () => null));
+        }
+        
+        function ensureBuilderBoardFromInputs() {
+          const w = parseInt(document.getElementById('boardWidth').value);
+          const h = parseInt(document.getElementById('boardHeight').value);
+          if (!builderBoard || builderBoard[0].length !== w || builderBoard.length !== h) {
+            builderBoard = makeEmptyBuilderBoard(w, h);
+          }
+        }
+        
+        function renderEditorGrid() {
+          ensureBuilderBoardFromInputs();
+          const w = builderBoard[0].length, h = builderBoard.length;
+          const size = Math.min(420 / Math.max(w, h), 42);
+          let html = '<div style="display:inline-block;border:1px solid #475569">';
+          for (let y = h - 1; y >= 0; y--) {
+            html += '<div style="display:flex">';
+            for (let x = 0; x < w; x++) {
+              const cell = builderBoard[y][x];
+              const isVoid = cell && cell.type === 'void';
+              const bg = isVoid ? '#0f172a' : ((x + y) % 2 === 0 ? '#f0d9b5' : '#b58863');
+              const text = !cell || isVoid ? '' : (cell.type || '');
+              html += `<div class="editor-square" data-x="${x}" data-y="${y}" style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${bg};color:#111;">${text}</div>`;
+            }
+            html += '</div>';
+          }
+          html += '</div>';
+          const el = document.getElementById('editorGrid');
+          if (el) el.innerHTML = html;
+        }
+
+
+        function renderGameBuilder() {
+            const config = gameConfig || VARIANTS.classic.config;
+            
+            return `
+                <div class="container">
+                    <div class="top-bar">
+                        <div>
+                            <h1>Custom Game Builder</h1>
+                            <p style="color: #94a3b8;">Configure your perfect chess variant</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="backToMenu()">← Back to Menu</button>
+                    </div>
+
+                    <div class="builder-grid">
+                        <div class="card">
+                            <h2>Board Setup</h2>
+
+                            <div class="input-group">
+                                <label>Starting Position</label>
+                                <select id="startingPosition">
+                                    <option value="standard" ${config.startingPosition === 'standard' ? 'selected' : ''}>Standard</option>
+                                    <option value="chess960" ${config.startingPosition === 'chess960' ? 'selected' : ''}>Chess960 (Random)</option>
+                                    <option value="horde" ${config.startingPosition === 'horde' ? 'selected' : ''}>Horde</option>
+                                    <option value="racingKings" ${config.startingPosition === 'racingKings' ? 'selected' : ''}>Racing Kings</option>
+                                    <option value="mini" ${config.startingPosition === 'mini' ? 'selected' : ''}>Mini (6×6)</option>
+                                    <option value="custom" ${config.startingPosition === 'custom' ? 'selected' : ''}>Custom (editor)</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                              <label>Width</label>
+                              <input type="number" id="boardWidth" value="${config.boardWidth}" min="4" max="16">
+                            </div>
+                            <div class="input-group">
+                              <label>Height</label>
+                              <input type="number" id="boardHeight" value="${config.boardHeight}" min="4" max="16">
+                            </div>
+                        </div>
+                        
+                        
+                        ${config.startingPosition === 'custom' ? `
+                            <div class="card" id="editorCard">
+                                <h2>Board Editor</h2>
+                                <p style="color:#94a3b8;margin-top:-.25rem">Use “Custom (editor)” in Starting Position, then place pieces or voids.</p>
+                            
+                            <div class="input-group">
+                                <label>Mode</label>
+                                <select id="editorMode">
+                                  <option value="place">Place Piece</option>
+                                  <option value="erase">Erase</option>
+                                  <option value="void">Toggle Void</option>
+                                </select>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label>Piece</label>
+                                <select id="editorPiece">
+                                  <option>K</option><option>Q</option><option>R</option>
+                                  <option>B</option><option>N</option><option>P</option>
+                                </select>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label>Owner (player index)</label>
+                                <input type="number" id="editorPlayer" min="0" max="${config.players - 1}" value="0">
+                            </div>
+                        
+                        
+                            <div id="editorGrid" style="margin-top:8px"></div>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="card">
+                            <h2>Players</h2>
+                            <div class="input-group">
+                                <label>Number of Players</label>
+                                <select id="numPlayers">
+                                    <option value="2" ${config.players === 2 ? 'selected' : ''}>2 Players</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h2>Movement Rules</h2>
+                            ${renderCheckbox('sidewaysPawns', 'Sideways Pawns (can move left/right)', config.rules.sidewaysPawns)}
+                            ${renderCheckbox('torpedoPawns', 'Torpedo Pawns (2-square move anytime)', config.rules.torpedoPawns)}
+                            ${renderCheckbox('forcedCaptures', 'Forced Captures (must capture if possible)', config.rules.forcedCaptures)}
+                            ${renderCheckbox('enPassant', 'En Passant', config.rules.enPassant)}
+                            ${renderCheckbox('castling', 'Castling', config.rules.castling)}
+                            ${renderCheckbox('promotion', 'Pawn Promotion', config.rules.promotion)}
+                        </div>
+
+                        <div class="card">
+                            <h2>Capture Rules</h2>
+                            ${renderCheckbox('atomicExplosions', 'Atomic Explosions (radius 1)', config.rules.atomicExplosions)}
+                            ${renderCheckbox('captureOwnPieces', 'Capture Own Pieces (except King)', config.rules.captureOwnPieces)}
+                            ${renderCheckbox('petrification', 'Petrification (pieces freeze after capturing)', config.rules.petrification)}
+                        </div>
+
+                        <div class="card">
+                            <h2>Special Mechanics</h2>
+                            ${renderCheckbox('pieceDrops', 'Piece Drops (Crazyhouse-style)', config.rules.pieceDrops)}
+                            ${renderCheckbox('duckChess', 'Duck Chess (shared blocker piece)', config.rules.duckChess)}
+                            ${renderCheckbox('fogOfWar', 'Fog of War (limited vision)', config.rules.fogOfWar)}
+                            <div class="input-group">
+                                <label>Check Rules</label>
+                                <select id="checkRules">
+                                    <option value="normal" ${config.rules.checkRules === 'normal' ? 'selected' : ''}>Normal (must escape check)</option>
+                                    <option value="captureKing" ${config.rules.checkRules === 'captureKing' ? 'selected' : ''}>Capture King (no check)</option>
+                                    <option value="noCheck" ${config.rules.checkRules === 'noCheck' ? 'selected' : ''}>No Check (king = normal piece)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h2>Win Conditions</h2>
+                            <p style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 1rem;">
+                                Select one or more. First condition met wins the game.
+                            </p>
+                            ${renderCheckbox('win_checkmate', 'Checkmate', config.winConditions.includes('checkmate'))}
+                            ${renderCheckbox('win_captureKing', 'Capture King', config.winConditions.includes('captureKing'))}
+                            ${renderCheckbox('win_kingToCenter', 'King to Center (King of the Hill)', config.winConditions.includes('kingToCenter'))}
+                            ${renderCheckbox('win_threeChecks', 'Three Checks', config.winConditions.includes('threeChecks'))}
+                            ${renderCheckbox('win_loseAllPieces', 'Lose All Pieces (Antichess)', config.winConditions.includes('loseAllPieces'))}
+                            ${renderCheckbox('win_racingKings', 'Racing Kings (reach 8th rank)', config.winConditions.includes('racingKings'))}
+                            ${renderCheckbox('win_lastPlayerStanding', 'Last Player Standing', config.winConditions.includes('lastPlayerStanding'))}
+                        </div>
+                    </div>
+
+                    <div class="builder-actions">
+                        <button class="btn btn-outline" onclick="backToMenu()">Cancel</button>
+                        <button class="btn btn-success" onclick="startCustomGame()" style="font-size: 1.1rem; padding: 1rem 2rem;">
+                            Start Game →
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCheckbox(id, label, checked) {
+            return `
+                <div class="checkbox-group">
+                    <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
+                    <label for="${id}">${label}</label>
+                </div>
+            `;
+        }
+        
+        if (document.getElementById('editorGrid')){
+            renderEditorGrid();
+        }
+        
+        function attachBuilderListeners() {
+          const root = document.getElementById('editorCard') || document;
+          // change
+          root.addEventListener('change', (e) => {
+            if (['boardWidth','boardHeight','numPlayers'].includes(e.target.id)) {
+              ensureBuilderBoardFromInputs();
+              renderEditorGrid();
+            }
+          });
+        
+          // click (editor squares)
+          root.addEventListener('click', (e) => {
+            const el = e.target.closest('.editor-square');
+            if (!el) return;
+            const x = parseInt(el.dataset.x), y = parseInt(el.dataset.y);
+            const mode = document.getElementById('editorMode').value;
+            if (mode === 'erase') {
+              builderBoard[y][x] = null;
+            } else if (mode === 'void') {
+              const cell = builderBoard[y][x];
+              builderBoard[y][x] = (cell && cell.type === 'void') ? null : { type: 'void' };
+            } else {
+              const type = document.getElementById('editorPiece').value;
+              const player = parseInt(document.getElementById('editorPlayer').value) || 0;
+              builderBoard[y][x] = { type, player, hasMoved:false };
+            }
+            renderEditorGrid();
+          });
+        }
+
+        function updateBuilderConfig() {
+          if (!gameConfig) {
+            gameConfig = JSON.parse(JSON.stringify(VARIANTS.classic.config));
+          }
+          // 🔑 make sure we store the current dropdown selection
+          const starting = document.getElementById('startingPosition')?.value;
+          if (starting) gameConfig.startingPosition = starting;
+        
+          // (optional but helpful) keep width/height in sync when visible
+          const bw = parseInt(document.getElementById('boardWidth')?.value || gameConfig.boardWidth);
+          const bh = parseInt(document.getElementById('boardHeight')?.value || gameConfig.boardHeight);
+          if (!Number.isNaN(bw)) gameConfig.boardWidth = bw;
+          if (!Number.isNaN(bh)) gameConfig.boardHeight = bh;
+        }
+
+        function renderGameBoard() {
+            const currentPlayer = gameState.players[gameState.currentPlayer];
+            
+            let statusText = gameState.gameOver 
+                ? `Game Over - ${gameState.players[gameState.winner].color} wins!`
+                : gameState.needsDuckMove 
+                ? `${currentPlayer.color}: Move the duck 🦆`
+                : droppingPiece
+                ? `${currentPlayer.color}: Drop ${droppingPiece.type}`
+                : `${currentPlayer.color} to move`;
+
+            const activeRules = Object.entries(gameConfig.rules)
+                .filter(([_, v]) => v === true)
+                .map(([k]) => k)
+                .join(', ') || 'Standard';
+
+            return `
+                <div class="container">
+                    <div class="top-bar">
+                        <div>
+                            <h1>${gameConfig.startingPosition || 'Custom Game'}</h1>
+                            <div class="game-status ${gameState.gameOver ? 'won' : gameState.needsDuckMove ? 'duck-mode' : ''}">
+                                ${statusText}
+                            </div>
+                            <div class="rules-active">Active Rules: ${activeRules}</div>
+                        </div>
+                        <button class="btn btn-outline" onclick="backToMenu()">Exit Game</button>
+                    </div>
+
+                    <div class="game-layout">
+                        <div>
+                            ${renderPlayerInfo(1)}
+                            ${gameConfig.rules.pieceDrops ? renderCapturedPieces(1) : ''}
+                        </div>
+                        <div class="board-container">
+                            ${renderBoard()}
+                        </div>
+                        <div>
+                            ${renderPlayerInfo(0)}
+                            ${gameConfig.rules.pieceDrops ? renderCapturedPieces(0) : ''}
+                        </div>
+                    </div>
+
+                    ${!gameState.gameOver ? `
+                        <div class="game-controls">
+                            <button class="btn btn-danger" onclick="resign()">Resign</button>
+                            ${droppingPiece ? `<button class="btn btn-outline" onclick="cancelDrop()">Cancel Drop</button>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function renderPlayerInfo(playerId) {
+            const player = gameState.players[playerId];
+            const isCurrent = gameState.currentPlayer === playerId;
+            
+            return `
+                <div class="player-info ${isCurrent ? 'active' : ''} ${player.isEliminated ? 'eliminated' : ''}">
+                    <div class="player-header">
+                        <div class="player-name">${player.color}</div>
+                        ${player.isEliminated ? '<span style="color: #ef4444;">✗ Eliminated</span>' : ''}
+                    </div>
+                    <div class="player-status">
+                        <span>⏱ ${formatTime(player.timeRemaining)}</span>
+                        ${player.checksGiven > 0 ? `<span>✓ Checks: ${player.checksGiven}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCapturedPieces(playerId) {
+            const player = gameState.players[playerId];
+            const canDrop = gameState.currentPlayer === playerId && !gameState.needsDuckMove;
+            
+            if (player.capturedPieces.length === 0 && !canDrop) return '';
+
+            return `
+                <div class="captured-pieces">
+                    <div class="captured-title">Captured Pieces ${canDrop ? '(Click to drop)' : ''}</div>
+                    <div class="captured-grid">
+                        ${player.capturedPieces.map((piece, i) => `
+                            <div class="captured-piece ${droppingPiece && droppingPiece.type === piece.type ? 'selected' : ''}" 
+                                 onclick="${canDrop ? `selectDrop(${playerId}, ${i})` : ''}">
+                                ${getPieceSymbol(piece.type, 0)}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderBoard() {
+            const size = Math.max(gameConfig.boardWidth, gameConfig.boardHeight);
+            const squareSize = Math.min(600 / size, 60);
+
+            let html = '<div class="chess-board">';
+            
+            for (let y = gameState.board.length - 1; y >= 0; y--) {
+                html += '<div class="board-row">';
+                for (let x = 0; x < gameState.board[y].length; x++) {
+                    html += renderSquare(x, y, squareSize);
+                }
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            return html;
+        }
+
+        function renderSquare(x, y, size) {
+            const square = gameState.board[y][x];
+            const isLight = (x + y) % 2 === 0;
+            const isSelected = selectedSquare && selectedSquare[0] === x && selectedSquare[1] === y;
+            const isHighlighted = highlightedMoves.some(([mx, my]) => mx === x && my === y);
+            const isDuck = gameState.duckPosition && gameState.duckPosition[0] === x && gameState.duckPosition[1] === y;
+            const isVisible = isSquareVisible(x, y, gameState.currentPlayer);
+
+            let classes = 'square ';
+            if (square && square.type === 'void') {
+                classes += 'void';
+            } else if (!isVisible) {
+                classes += 'fog';
+            } else {
+                classes += isLight ? 'light' : 'dark';
+            }
+            if (isSelected) classes += ' selected';
+            if (isHighlighted && !square) classes += ' highlighted';
+            if (isHighlighted && square && square.type !== 'void') classes += ' can-capture';
+
+            let content = '';
+            if (!isVisible) {
+                content = '?';
+            } else if (isDuck) {
+                content = '<div class="duck">🦆</div>';
+            } else if (square && square.type !== 'void') {
+                const pieceColor = PLAYER_CSS_COLORS[square.player];
+                content = `<div class="piece ${pieceColor} ${square.petrified ? 'petrified' : ''}">${getPieceSymbol(square.type, square.player)}</div>`;
+            } else if (isHighlighted && !square) {
+                content = '<div class="move-indicator"></div>';
+            }
+
+            return `<div class="${classes}" style="width: ${size}px; height: ${size}px;" data-x="${x}" data-y="${y}">${content}</div>`;
+        }
+
+        function attachGameListeners() {
+            const squares = document.querySelectorAll('.square:not(.void)');
+            squares.forEach(square => {
+                square.addEventListener('click', handleSquareClick);
+            });
+        }
+
+        function handleSquareClick(e) {
+            if (gameState.gameOver) return;
+
+            const square = e.currentTarget;
+            const x = parseInt(square.dataset.x);
+            const y = parseInt(square.dataset.y);
+
+            if (gameState.needsDuckMove) {
+                handleDuckMove(x, y);
+            } else if (droppingPiece) {
+                handlePieceDrop(x, y);
+            } else {
+                handleNormalMove(x, y);
+            }
+        }
+        
+        function isLegalDuckSquare(x, y) {
+          // inside board?
+          if (!gameState.board[y] || typeof gameState.board[y][x] === "undefined") return false;
+        
+          // must be empty of chess pieces
+          if (gameState.board[y][x]) return false;
+        
+          // cannot place on the square where the duck currently is
+          const dp = gameState.duckPosition;
+          if (dp && dp[0] === x && dp[1] === y) return false;
+        
+          // otherwise allowed (including the square it was on last turn)
+          return true;
+        }
+        
+        function handleDuckMove(x, y) {
+          if (!gameConfig.rules.duckChess || !gameState.needsDuckMove) return;
+          if (!isLegalDuckSquare(x, y)) return;
+        
+          gameState.duckPosition = [x, y];
+          gameState.needsDuckMove = false;
+        
+          // piece+duck = one move; pass the turn now
+          advanceTurnSkippingEliminated();
+          render();
+        }
+
+        function handlePieceDrop(x, y) {
+          const square = gameState.board[y][x];
+          const isDuckSquare = gameState.duckPosition && gameState.duckPosition[0] === x && gameState.duckPosition[1] === y;
+          const playerId = gameState.currentPlayer;
+          const player = gameState.players[playerId];
+        
+          if (!droppingPiece) return;
+          if (!gameConfig.rules.pieceDrops) return;
+        
+          // Forced captures? Drops disallowed if any capture available
+          if (gameConfig.rules.forcedCaptures && hasAnyCaptureMoves(playerId)) {
+            alert('A capture is available — you must capture (drops are not allowed under Forced Captures).');
+            return;
+          }
+        
+          if (!isLegalDropSquare(x, y) || square || isDuckSquare) return;
+        
+          // Pawn drop rank restriction
+          if (droppingPiece.type === 'P') {
+            const firstRank = (playerId === 0) ? 0 : 0; // first rank absolute, not relative to side
+            const lastRank  = gameConfig.boardHeight - 1;
+            if (y === firstRank || y === lastRank) {
+              alert('You cannot drop a pawn on the first or last rank.');
+              return;
+            }
+          }
+        
+          // Rule legality: king safety (and illegal-check)
+          if (!isDropPositionLegalForRules(x, y, droppingPiece, playerId)) return;
+        
+          // Apply the drop
+          const pieceIndex = player.capturedPieces.findIndex(p => p.type === droppingPiece.type);
+          if (pieceIndex < 0) return; // safety
+        
+          player.capturedPieces.splice(pieceIndex, 1);
+          gameState.board[y][x] = { ...droppingPiece, player: playerId, hasMoved: true };
+        
+          // After a drop, clear en passant target (no pawn moved two squares)
+          gameState.enPassant = null;
+        
+          // Duck chess: still need to place duck after a drop? (standard Crazyhouse says a drop is a move)
+          gameState.needsDuckMove = gameConfig.rules.duckChess;
+        
+          // Pass the turn (unless duck move is pending)
+          if (!gameState.needsDuckMove) advanceTurnSkippingEliminated();
+        
+          droppingPiece = null;
+          render();
+        }
+
+        function handleNormalMove(x, y) {
+            const square = gameState.board[y][x];
+
+            if (selectedSquare) {
+                const [sx, sy] = selectedSquare;
+                
+                if (highlightedMoves.some(([mx, my]) => mx === x && my === y)) {
+                    makeMove(sx, sy, x, y);
+                    
+                    const winner = checkWinConditions();
+                    if (winner !== null) {
+                        gameState.gameOver = true;
+                        gameState.winner = winner;
+                    }
+                    
+                    render();
+                } else if (square && square.type !== 'void' && square.player === gameState.currentPlayer) {
+                    selectedSquare = [x, y];
+                    highlightedMoves = getPossibleMoves(x, y);
+                    render();
+                } else {
+                    selectedSquare = null;
+                    highlightedMoves = [];
+                    render();
+                }
+            } else if (square && square.type !== 'void' && square.player === gameState.currentPlayer) {
+                selectedSquare = [x, y];
+                highlightedMoves = getPossibleMoves(x, y);
+                render();
+            }
+        }
+
+        function getPieceSymbol(type, player) {
+            if (type === 'D') return '🦆';
+            const symbols = PIECE_SYMBOLS[type];
+            if (!symbols) return '?';
+            return player === 0 || player === 2 ? symbols.white : symbols.black;
+        }
+
+        function formatTime(ms) {
+            const seconds = Math.floor(ms / 1000);
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // ============================================================================
+        // GLOBAL FUNCTIONS (called from HTML)
+        // ============================================================================
+
+        function startQuickGame(variantId) {
+            const variant = VARIANTS[variantId];
+            if (variant) {
+                gameConfig = JSON.parse(JSON.stringify(variant.config));
+                initializeGame(gameConfig);
+                currentScreen = 'game';
+                render();
+            }
+        }
+
+        function goToBuilder() {
+            gameConfig = JSON.parse(JSON.stringify(VARIANTS.classic.config));
+            currentScreen = 'builder';
+            render();
+        }
+
+        function backToMenu() {
+            currentScreen = 'menu';
+            gameState = null;
+            gameConfig = null;
+            selectedSquare = null;
+            highlightedMoves = [];
+            droppingPiece = null;
+            render();
+        }
+
+        function startCustomGame() {
+            const config = {
+                boardWidth: parseInt(document.getElementById('boardWidth').value),
+                boardHeight: parseInt(document.getElementById('boardHeight').value),
+                players: parseInt(document.getElementById('numPlayers').value),
+                voidSquares: [],
+                rules: {
+                    sidewaysPawns: document.getElementById('sidewaysPawns').checked,
+                    torpedoPawns: document.getElementById('torpedoPawns').checked,
+                    forcedCaptures: document.getElementById('forcedCaptures').checked,
+                    atomicExplosions: document.getElementById('atomicExplosions').checked,
+                    captureOwnPieces: document.getElementById('captureOwnPieces').checked,
+                    pieceDrops: document.getElementById('pieceDrops').checked,
+                    duckChess: document.getElementById('duckChess').checked,
+                    petrification: document.getElementById('petrification').checked,
+                    enPassant: document.getElementById('enPassant').checked,
+                    castling: document.getElementById('castling').checked,
+                    promotion: document.getElementById('promotion').checked,
+                    checkRules: document.getElementById('checkRules').value,
+                    fogOfWar: document.getElementById('fogOfWar').checked,
+                    fogRadius: 2
+                },
+                winConditions: [],
+                startingPosition: document.getElementById('startingPosition').value
+            };
+
+            // Collect win conditions
+            if (document.getElementById('win_checkmate').checked) config.winConditions.push('checkmate');
+            if (document.getElementById('win_captureKing').checked) config.winConditions.push('captureKing');
+            if (document.getElementById('win_kingToCenter').checked) config.winConditions.push('kingToCenter');
+            if (document.getElementById('win_threeChecks').checked) config.winConditions.push('threeChecks');
+            if (document.getElementById('win_loseAllPieces').checked) config.winConditions.push('loseAllPieces');
+            if (document.getElementById('win_racingKings').checked) config.winConditions.push('racingKings');
+            if (document.getElementById('win_lastPlayerStanding').checked) config.winConditions.push('lastPlayerStanding');
+
+            if (config.winConditions.length === 0) {
+                alert('Please select at least one win condition!');
+                return;
+            }
+
+            if (config.startingPosition === 'custom') {
+              ensureBuilderBoardFromInputs();
+              config.voidSquares = [];
+              config.customSetup = [];
+              for (let y = 0; y < builderBoard.length; y++) {
+                for (let x = 0; x < builderBoard[0].length; x++) {
+                  const cell = builderBoard[y][x];
+                  if (!cell) continue;
+                  if (cell.type === 'void') {
+                    config.voidSquares.push([x, y]);
+                  } else {
+                    config.customSetup.push({ x, y, type: cell.type, player: cell.player || 0, hasMoved: !!cell.hasMoved });
+                  }
+                }
+              }
+            }
+
+            gameConfig = config;
+            initializeGame(config);
+            currentScreen = 'game';
+            render();
+        }
+
+        function resign() {
+            gameState.gameOver = true;
+            gameState.winner = (gameState.currentPlayer + 1) % gameConfig.players;
+            render();
+        }
+
+        function selectDrop(playerId, pieceIndex) {
+            const piece = gameState.players[playerId].capturedPieces[pieceIndex];
+            droppingPiece = piece;
+            selectedSquare = null;
+            highlightedMoves = [];
+            render();
+        }
+
+        function cancelDrop() {
+            droppingPiece = null;
+            render();
+        }
+
+        // ============================================================================
+        // INITIALIZE APP
+        // ============================================================================
+
+        render();
+    </script>
+</body>
+</html>

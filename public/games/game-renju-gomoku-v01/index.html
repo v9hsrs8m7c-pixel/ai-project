@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Renju / Gomoku — Single-File Game</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#111723;
+    --accent:#6aa9ff;
+    --grid:#3a4657;
+    --grid-bold:#54617a;
+    --stone-edge:#0a0a0a80;
+    --black:#111;
+    --white:#f4f5f8;
+    --win:#2fe39a;
+    --forbid:#ff5d7a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b0f14, #0b0f14 60%, #0f1624);
+    color:#dde3f3; font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif;
+    display:flex; min-height:100svh; gap:18px; padding:18px;
+  }
+  .shell{
+    display:grid; grid-template-columns: 1fr 320px; gap:18px; width:100%; max-width:1400px; margin:auto;
+  }
+  .board-wrap{
+    background:radial-gradient(1500px 800px at 10% -10%, #182437, transparent 50%), #0f1624;
+    border:1px solid #1c2738; border-radius:16px; padding:16px; position:relative; box-shadow:0 20px 60px #0006 inset, 0 10px 40px #0006;
+    display:flex; align-items:center; justify-content:center;
+  }
+  canvas{ display:block; background:#f1d69d; border-radius:12px; box-shadow: inset 0 3px 0 #0002, inset 0 -3px 0 #fff2; max-width:100%; height:auto; }
+  .side{
+    background:var(--panel); border:1px solid #1c2738; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:12px;
+    box-shadow: 0 12px 30px #0007;
+  }
+  h1{font-size:18px; margin:0 0 6px; letter-spacing:.3px}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .row > *{flex:1}
+  label{font-size:12px; opacity:.9}
+  input, select, button{
+    background:#0e1522; color:#dfe7ff; border:1px solid #273145; border-radius:10px; padding:10px 12px; outline:none;
+  }
+  input[type=number]{width:100%}
+  button{
+    background:linear-gradient(180deg,#15223a,#0f192c);
+    cursor:pointer; transition:.15s transform ease, .2s border-color ease, .2s box-shadow ease;
+  }
+  button:hover{transform: translateY(-1px); border-color:#35507a; box-shadow:0 6px 16px #0008}
+  button:active{transform:translateY(0)}
+  .btn-accent{border-color:#4367a7; box-shadow:0 6px 16px #0006}
+  .toolbar{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .status{
+    background:#0e1522; border:1px solid #26344e; border-radius:12px; padding:10px 12px; min-height:44px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+  .pill{padding:4px 8px; border-radius:999px; border:1px solid #2a3a58; font-size:12px}
+  .pill.black{background:#111; color:#fff; border-color:#000}
+  .pill.white{background:#f4f5f8; color:#111; border-color:#ddd}
+  .legend{display:flex; gap:8px; flex-wrap:wrap}
+  .muted{opacity:.8}
+  .moves{flex:1; overflow:auto; background:#0e1522; border:1px solid #26344e; border-radius:12px; padding:10px; min-height:120px}
+  .moves ol{margin:0 0 0 18px; padding:0; columns: 2 180px}
+  .moves li{margin:2px 0}
+  .tag{display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 8px; border:1px solid #2a3a58; border-radius:999px}
+  .tag .dot{width:10px; height:10px; border-radius:50%}
+  .tag .dot.black{background:#111; box-shadow:0 0 0 1px #000, inset 0 1px 0 #fff3}
+  .tag .dot.white{background:#f4f5f8; box-shadow:0 0 0 1px #ddd, inset 0 1px 0 #0001}
+  .subtle{opacity:.7; font-size:12px}
+  .note{color:#b9d6ff}
+  .hr{height:1px; background:#1d2a3f; margin:8px 0}
+  .danger{color:#ff93a6}
+  .success{color:#2fe39a}
+  .coords-toggle{display:flex; gap:8px; align-items:center}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="board-wrap">
+      <canvas id="board" width="900" height="900" aria-label="Gomoku board"></canvas>
+    </div>
+    <aside class="side">
+      <h1>Renju / Gomoku</h1>
+      <div class="status" id="status">
+        <div>
+          <div id="turnText">Turn: <span class="pill black">Black</span></div>
+          <div id="ruleText" class="subtle">Rules: Freestyle</div>
+        </div>
+        <div class="legend">
+          <span class="tag"><span class="dot black"></span> Black</span>
+          <span class="tag"><span class="dot white"></span> White</span>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button id="undoBtn" title="Undo (Ctrl/⌘+Z)">↶ Undo</button>
+        <button id="redoBtn" title="Redo (Ctrl/⌘+Y)">↷ Redo</button>
+        <button id="restartBtn" class="btn-accent" style="grid-column: span 2;">⟲ New Game</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row">
+        <div>
+          <label for="size">Board size (N×N)</label>
+          <input id="size" type="number" min="9" max="25" step="1" value="15" />
+        </div>
+        <div>
+          <label for="winLen">Win length</label>
+          <input id="winLen" type="number" min="5" max="10" step="1" value="5" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="rules">Rule set</label>
+          <select id="rules">
+            <option value="freestyle" selected>Freestyle (≥5 wins)</option>
+            <option value="simple-renju">Simple Renju (open-3/4 forbids for Black)</option>
+            <option value="strict-renju">Strict Renju (exact-5 Black + forbids)</option>
+          </select>
+        </div>
+        <div class="coords-toggle">
+          <input type="checkbox" id="showCoords" checked />
+          <label for="showCoords">Show coordinates & star points</label>
+        </div>
+      </div>
+      <button id="applyBtn" class="btn-accent">Apply Settings (resets)</button>
+
+      <div class="hr"></div>
+
+      <div class="moves">
+        <div class="muted">Move list</div>
+        <ol id="moveList"></ol>
+      </div>
+
+      <div class="subtle">
+        <span class="note">Tips:</span> Click intersections to place a stone. Keyboard: <b>Ctrl/⌘+Z</b> undo, <b>Ctrl/⌘+Y</b> redo.
+        In Renju modes, Black is restricted: double-three, double-four, and overlines are illegal. Strict mode also requires exact-five for Black to win.
+      </div>
+    </aside>
+  </div>
+
+<script>
+(()=>{
+  // --- Config / State ---
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+
+  const ui = {
+    turnText: document.getElementById('turnText'),
+    ruleText: document.getElementById('ruleText'),
+    moveList: document.getElementById('moveList'),
+    undoBtn: document.getElementById('undoBtn'),
+    redoBtn: document.getElementById('redoBtn'),
+    restartBtn: document.getElementById('restartBtn'),
+    size: document.getElementById('size'),
+    winLen: document.getElementById('winLen'),
+    rules: document.getElementById('rules'),
+    showCoords: document.getElementById('showCoords'),
+    applyBtn: document.getElementById('applyBtn'),
+    status: document.getElementById('status')
+  };
+
+  let N = clamp(parseInt(ui.size.value,10), 9, 25);
+  let WIN_LEN = clamp(parseInt(ui.winLen.value,10), 5, 10);
+  let RULES = ui.rules.value; // 'freestyle' | 'simple-renju' | 'strict-renju'
+  let SHOW_COORDS = ui.showCoords.checked;
+
+  const EMPTY=0, BLACK=1, WHITE=2;
+
+  let gridPx;        // pixel size of grid area (square)
+  let cell;          // pixels per cell
+  let pad;           // padding around grid
+  let board;         // 2D array N x N
+  let turn;          // 1 or 2
+  let history;       // {x,y,color}[]
+  let redoStack;     // moves popped from history
+  let winner=null;   // null | BLACK | WHITE
+  let lastMove=null; // {x,y}
+
+  // --- Helpers ---
+  function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
+  function deepBoard(n){ return Array.from({length:n},()=>Array(n).fill(EMPTY)); }
+  function idxToCoord(i){ return String.fromCharCode('A'.charCodeAt(0)+i + (i>=8?1:0)); } // skip 'I'
+  function starPointsFor(n){
+    // Common star layouts for 9/13/15/19; fallback none
+    const mk=(pts)=>pts;
+    if(n===9) return mk([[2,2],[2,6],[6,2],[6,6],[4,4]]);
+    if(n===13) return mk([[3,3],[3,9],[9,3],[9,9],[6,6]]);
+    if(n===15) return mk([[3,3],[3,11],[11,3],[11,11],[7,7]]);
+    if(n===19) return mk([[3,3],[3,9],[3,15],[9,3],[9,9],[9,15],[15,3],[15,9],[15,15]]);
+    return [];
+  }
+
+  function resetGame(){
+    board = deepBoard(N);
+    turn = BLACK;
+    history = [];
+    redoStack = [];
+    winner = null;
+    lastMove = null;
+    updateStatus();
+    draw();
+    renderMoves();
+  }
+
+  // --- Layout / Draw ---
+  function layout(){
+    // Responsive square canvas, keep devicePixelRatio crispness
+    const dpr = window.devicePixelRatio || 1;
+    const minSide = Math.min(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
+    const target = clamp(Math.floor(minSide - 24), 360, 1024);
+    canvas.style.width = canvas.style.height = target+'px';
+    canvas.width = Math.floor(target * dpr);
+    canvas.height= Math.floor(target * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    pad = 36; // outer padding
+    gridPx = target - pad*2;
+    cell = gridPx / (N-1);
+    draw();
+  }
+
+  function drawGrid(){
+    ctx.save();
+    ctx.fillStyle = '#f1d69d';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(pad,pad);
+    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+
+    // light wood texture lines
+    for(let i=0;i<N;i++){
+      const p = i*cell;
+      ctx.beginPath(); ctx.moveTo(0,p); ctx.lineTo(gridPx,p); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p,0); ctx.lineTo(p,gridPx); ctx.stroke();
+    }
+    // outer bold border
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid-bold');
+    ctx.strokeRect(0,0,gridPx,gridPx);
+
+    // star points
+    if(SHOW_COORDS){
+      const stars = starPointsFor(N);
+      ctx.fillStyle = '#333';
+      stars.forEach(([r,c])=>{
+        const x = c*cell, y = r*cell;
+        ctx.beginPath(); ctx.arc(x,y,3.1,0,Math.PI*2); ctx.fill();
+      });
+
+      // Coordinates
+      ctx.fillStyle = '#333';
+      ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline='middle';
+
+      for(let i=0;i<N;i++){
+        const x = pad + i*cell, yTop = pad-18, yBot = pad+gridPx+18;
+        const col = idxToCoord(i);
+        ctx.fillText(col, x, yTop);
+        ctx.fillText(col, x, yBot);
+      }
+      for(let j=0;j<N;j++){
+        const y = pad + j*cell, xL = pad-18, xR = pad+gridPx+18;
+        const row = (N-j);
+        ctx.fillText(String(row), xL, y);
+        ctx.fillText(String(row), xR, y);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function drawStones(){
+    ctx.save();
+    ctx.translate(pad,pad);
+    for(let y=0;y<N;y++){
+      for(let x=0;x<N;x++){
+        const v = board[y][x];
+        if(v===EMPTY) continue;
+        const cx = x*cell, cy = y*cell;
+        drawStone(cx,cy,v,(lastMove && lastMove.x===x && lastMove.y===y));
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawStone(x,y,color,isLast){
+    const r = Math.max(8, cell*0.42);
+    ctx.save();
+    // base
+    const grd = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.1, x, y, r*1.1);
+    if(color===BLACK){
+      grd.addColorStop(0, '#222');
+      grd.addColorStop(1, '#000');
+    } else {
+      grd.addColorStop(0, '#fff');
+      grd.addColorStop(1, '#e6e6e6');
+    }
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle = grd; ctx.fill();
+    // edge
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.2; ctx.stroke();
+
+    if(isLast){
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = color===BLACK ? '#7ab6ff' : '#ffda7a';
+      ctx.beginPath(); ctx.arc(x,y,r*0.55,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawWinLine(win){
+    if(!win) return;
+    ctx.save();
+    ctx.translate(pad,pad);
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--win');
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    const sx = win.start.x*cell, sy = win.start.y*cell;
+    const ex = win.end.x*cell, ey = win.end.y*cell;
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw(){
+    drawGrid();
+    drawStones();
+    drawWinLine(winner && winner.line);
+  }
+
+  // --- Interaction ---
+  canvas.addEventListener('click', (e)=>{
+    if(winner) return;
+    const {x,y} = eventToCell(e);
+    if(x<0||y<0||x>=N||y>=N) return;
+    if(board[y][x]!==EMPTY) return;
+
+    // Attempt move
+    const color = turn;
+    if(isForbidden(x,y,color)){
+      flashStatus("Forbidden move (Renju)", true);
+      return;
+    }
+
+    placeMove(x,y,color);
+    const res = checkWinAt(x,y,color);
+    if(res.won){
+      winner = {color, line: res.line};
+      updateStatus();
+      draw();
+      flashStatus((color===BLACK?'Black':'White')+' wins!', false, true);
+      return;
+    }
+
+    // Next turn
+    turn = 3 - turn;
+    updateStatus();
+    draw();
+  });
+
+  function eventToCell(e){
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left);
+    const my = (e.clientY - rect.top);
+    const gx = (mx - pad) / cell;
+    const gy = (my - pad) / cell;
+    // snap to nearest intersection if close enough
+    const nx = Math.round(gx);
+    const ny = Math.round(gy);
+    const px = pad + nx*cell;
+    const py = pad + ny*cell;
+    const dist = Math.hypot(px - mx, py - my);
+    if(dist > Math.max(14, cell*0.45)) return {x:-1,y:-1};
+    return {x:nx, y:ny};
+  }
+
+  function placeMove(x,y,color){
+    board[y][x] = color;
+    history.push({x,y,color});
+    redoStack.length = 0;
+    lastMove = {x,y};
+    addMoveToList(x,y,color);
+  }
+
+  // --- Undo / Redo ---
+  ui.undoBtn.addEventListener('click', undo);
+  ui.redoBtn.addEventListener('click', redo);
+  ui.restartBtn.addEventListener('click', ()=>{ resetGame(); flashStatus('New game started.'); });
+
+  function undo(){
+    if(history.length===0) return;
+    const move = history.pop();
+    board[move.y][move.x] = EMPTY;
+    redoStack.push(move);
+    winner=null;
+    lastMove = history.length? {x:history[history.length-1].x, y:history[history.length-1].y} : null;
+    turn = move.color; // same player to move again
+    renderMoves();
+    updateStatus();
+    draw();
+  }
+
+  function redo(){
+    if(redoStack.length===0) return;
+    const move = redoStack.pop();
+    if(isForbidden(move.x, move.y, move.color)){
+      // Should rarely happen because it was a previous legal move
+      flashStatus("Redo resulted in forbidden move; canceled.", true);
+      return;
+    }
+    board[move.y][move.x] = move.color;
+    history.push(move);
+    lastMove = {x:move.x,y:move.y};
+    turn = 3 - move.color;
+    const res = checkWinAt(move.x, move.y, move.color);
+    if(res.won){ winner = {color:move.color, line:res.line}; }
+    renderMoves();
+    updateStatus();
+    draw();
+  }
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    const mod = e.ctrlKey || e.metaKey;
+    if(mod && e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
+    if(mod && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
+  });
+
+  // --- Win / Rule Logic ---
+  function checkWinAt(x,y,color){
+    // Counts contiguous stones through (x,y) in each direction
+    const dirs = [[1,0],[0,1],[1,1],[1,-1]];
+    for(const [dx,dy] of dirs){
+      const a = 1 + countDir(x,y,dx,dy,color) + countDir(x,y,-dx,-dy,color);
+      if(RULES==='strict-renju' && color===BLACK){
+        if(a===WIN_LEN){
+          const line = winLine(x,y,dx,dy,color);
+          return {won:true, line};
+        }
+      } else {
+        if(a>=WIN_LEN){
+          const line = winLine(x,y,dx,dy,color);
+          return {won:true, line};
+        }
+      }
+    }
+    return {won:false};
+  }
+
+  function countDir(x,y,dx,dy,color){
+    let c=0;
+    for(let i=1;i<WIN_LEN+6;i++){
+      const nx=x+dx*i, ny=y+dy*i;
+      if(nx<0||ny<0||nx>=N||ny>=N) break;
+      if(board[ny][nx]===color) c++; else break;
+    }
+    return c;
+  }
+
+  function winLine(x,y,dx,dy,color){
+    // Find endpoints of the best line >= WIN_LEN
+    let sx=x, sy=y;
+    while(true){
+      const nx=sx-dx, ny=sy-dy;
+      if(nx<0||ny<0||nx>=N||ny>=N) break;
+      if(board[ny][nx]===color){ sx=nx; sy=ny; } else break;
+    }
+    let ex=x, ey=y;
+    while(true){
+      const nx=ex+dx, ny=ey+dy;
+      if(nx<0||ny<0||nx>=N||ny>=N) break;
+      if(board[ny][nx]===color){ ex=nx; ey=ny; } else break;
+    }
+    return {start:{x:sx,y:sy}, end:{x:ex,y:ey}};
+  }
+
+  // Forbidden checks for Renju (applies to BLACK only)
+  function isForbidden(x,y,color){
+    if(RULES==='freestyle') return false;
+    // Simulate placement
+    if(color===WHITE) return false; // White unrestricted in our implementation
+    // Check overline
+    if(overlineIfPlaced(x,y,color)) return true;
+
+    // Simple patterns for double-three / double-four
+    const {openThrees, openFours} = analyzePatternsIfPlaced(x,y,color);
+
+    if(openThrees>=2) return true;          // double-three
+    if(openFours>=2) return true;           // double-four
+
+    return false;
+  }
+
+  function overlineIfPlaced(x,y,color){
+    const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+    for(const [dx,dy] of dirs){
+      const a = 1 + countDirPlaced(x,y,dx,dy,color) + countDirPlaced(x,y,-dx,-dy,color);
+      if(a>WIN_LEN) return true; // overline (strict)
+    }
+    return false;
+  }
+
+  function countDirPlaced(x,y,dx,dy,color){
+    let c=0;
+    for(let i=1;i<WIN_LEN+6;i++){
+      const nx=x+dx*i, ny=y+dy*i;
+      if(nx<0||ny<0||nx>=N||ny>=N) break;
+      const v = (nx===x && ny===y) ? color : board[ny][nx];
+      if(v===color) c++; else break;
+    }
+    return c;
+  }
+
+  // Pattern scanning around the placed stone.
+  // We create line strings centered at (x,y) for 4 directions and count pattern occurrences.
+  function analyzePatternsIfPlaced(x,y,color){
+    let openThrees=0, openFours=0;
+
+    const dirs=[[1,0],[0,1],[1,1],[1,-1]];
+    for(const [dx,dy] of dirs){
+      const s = lineString(x,y,dx,dy,color);
+      // Count open fours: 011110
+      openFours += countPatterns(s, ['011110']);
+      // Count open threes: 01110, 010110, 011010 (basic gapped)
+      openThrees += countPatterns(s, ['01110','010110','011010']);
+    }
+    // Each direction group counts at most 1 instance to avoid multi-overlap inflation
+    openThrees = Math.min(openThrees, 4);
+    openFours = Math.min(openFours, 4);
+    return {openThrees, openFours};
+  }
+
+  function lineString(x,y,dx,dy,color){
+    // Build a window string with 0 empty, 1 black, 2 white; include ~8 on each side
+    const window = [];
+    for(let i=8;i>=1;i--){
+      const nx=x-dx*i, ny=y-dy*i;
+      window.push(valAt(nx,ny));
+    }
+    window.push(color); // placed stone
+    for(let i=1;i<=8;i++){
+      const nx=x+dx*i, ny=y+dy*i;
+      window.push(valAt(nx,ny));
+    }
+    // Convert to string of digits
+    return window.map(v=>String(v)).join('');
+  }
+
+  function valAt(x,y){
+    if(x<0||y<0||x>=N||y>=N) return 2; // treat off-board as opponent (block)
+    return board[y][x];
+  }
+
+  function countPatterns(s, patterns){
+    let total=0;
+    for(const p of patterns){
+      // Allow overlaps but count each unique index once
+      let idx = s.indexOf(p);
+      while(idx!==-1){
+        total++;
+        idx = s.indexOf(p, idx+1);
+      }
+    }
+    // Cap to 1 per direction lane for “isForbidden” logic simplicity
+    return Math.min(total,1);
+  }
+
+  // --- UI status / moves ---
+  function updateStatus(){
+    const t = winner ? (winner.color===BLACK?'Black wins':'White wins') : (turn===BLACK?'Black':'White');
+    ui.turnText.innerHTML = 'Turn: ' + (winner
+      ? `<span class="pill ${winner.color===BLACK?'black':'white'}">${t}</span>`
+      : `<span class="pill ${turn===BLACK?'black':'white'}">${t}</span>`);
+
+    const ruleDesc = {
+      'freestyle':'Freestyle',
+      'simple-renju':'Simple Renju',
+      'strict-renju':'Strict Renju'
+    }[RULES];
+    ui.ruleText.textContent = `Rules: ${ruleDesc}`;
+  }
+
+  function addMoveToList(x,y,color){
+    const li = document.createElement('li');
+    li.textContent = `${history.length}. ${color===BLACK?'B':'W'} ${idxToCoord(x)}${N-y}`;
+    ui.moveList.appendChild(li);
+  }
+  function renderMoves(){
+    ui.moveList.innerHTML = '';
+    history.forEach((m,i)=>{
+      const li = document.createElement('li');
+      li.textContent = `${i+1}. ${m.color===BLACK?'B':'W'} ${idxToCoord(m.x)}${N-m.y}`;
+      ui.moveList.appendChild(li);
+    });
+  }
+
+  function flashStatus(msg, danger=false, success=false){
+    const old = ui.status.innerHTML;
+    const cls = danger? 'danger' : success? 'success' : 'note';
+    const ruleTextHTML = ui.ruleText.outerHTML;
+    ui.status.innerHTML = `<div>${msg}</div><div class="${cls} subtle">${(danger?'Rule conflict':'Info')}</div>`;
+    setTimeout(()=>{ ui.status.innerHTML = old; ui.ruleText.outerHTML = ruleTextHTML; }, 1400);
+  }
+
+  // --- Settings ---
+  ui.applyBtn.addEventListener('click', ()=>{
+    N = clamp(parseInt(ui.size.value,10), 9, 25);
+    WIN_LEN = clamp(parseInt(ui.winLen.value,10), 5, 10);
+    RULES = ui.rules.value;
+    SHOW_COORDS = ui.showCoords.checked;
+    resetGame();
+    layout();
+    flashStatus('Settings applied.');
+  });
+
+  // --- Init ---
+  window.addEventListener('resize', layout);
+  resetGame();
+  layout();
+
+})();
+</script>
+</body>
+</html>

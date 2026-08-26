@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quoridor – Undo/Redo + Stable Rendering + Move Hints</title>
+<style>
+  :root{
+    --cell: 60px;   /* bump size */
+    --gap: 10px;    /* groove size */
+    --rail: 16px;   /* fence thickness */
+    --pad: 18px;    /* board frame padding */
+    --wood:#6b3718; --plank:#c79250; --bg:#dcc7ae; --hint:#ffffff2e; --best:#50dc78cc;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);display:grid;place-items:center;font-family:system-ui,Segoe UI,Roboto,sans-serif;user-select:none}
+
+  .wrap{display:flex;gap:24px;align-items:center;max-width:min(96vw,1200px)}
+  /* side trays */
+  .side{display:grid;grid-template-columns:repeat(2,var(--rail));grid-auto-rows:var(--rail);gap:10px;padding:12px;background:#efddc6;border-radius:14px;box-shadow:0 6px 16px rgba(0,0,0,.18) inset,0 8px 18px rgba(0,0,0,.15); min-width:180px}
+  .tray-title{grid-column:1/-1;text-align:center;font-size:12px;color:#532}
+  .fence{background:var(--plank);border-radius:6px;box-shadow:inset 0 3px 6px rgba(0,0,0,.35),0 4px 10px rgba(0,0,0,.25);cursor:grab;touch-action:none}
+  .h{width:calc(var(--cell)*2 + var(--gap));height:var(--rail)}
+  .v{width:var(--rail);height:calc(var(--cell)*2 + var(--gap))}
+  .drag{opacity:.95;cursor:grabbing;position:fixed;z-index:30;pointer-events:none;touch-action:none}
+
+  /* board */
+  .board{position:relative;width:calc(var(--pad)*2 + var(--cell)*9 + var(--gap)*8);height:calc(var(--pad)*2 + var(--cell)*9 + var(--gap)*8);background:radial-gradient(120% 120% at 15% 10%,#7f411c,var(--wood));padding:var(--pad);border-radius:18px;box-shadow:0 18px 34px rgba(0,0,0,.45)}
+  .grid{position:relative;display:grid;grid-template-columns:repeat(9,var(--cell));grid-template-rows:repeat(9,var(--cell));gap:var(--gap)}
+  .cell{background:linear-gradient(#1b1b1b,#0f0f0f);border-radius:8px;box-shadow:inset 0 3px 5px rgba(0,0,0,.6),inset 0 -2px 1px rgba(255,255,255,.05)}
+
+  /* pawns */
+  .pawn{--r:22px;position:absolute;width:calc(var(--r)*2);height:calc(var(--r)*2);border-radius:50%;transform:translate(-50%,-50%);transition:left .25s ease,top .25s ease;box-shadow:0 6px 12px rgba(0,0,0,.35);z-index:10; will-change: left, top}
+  .red{background:radial-gradient(circle at 30% 30%,#db4b40,#7a1b15)}
+  .gold{background:radial-gradient(circle at 30% 30%,#f5d979,#b58727)}
+  .current{outline:4px solid rgba(255,255,255,.25)}
+
+  /* move hints (pawn only) */
+  .hint-cell{position:absolute;width:var(--cell);height:var(--cell);border-radius:8px;cursor:pointer;z-index:12;box-shadow:inset 0 0 0 4px var(--hint)}
+  .best{box-shadow:inset 0 0 0 0px var(--best)}/*change 0px to 8px to show best move*/
+
+  .ui{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:10px}
+  .btn{background:#fff7ee;border:0;border-radius:10px;padding:8px 12px;box-shadow:0 4px 10px rgba(0,0,0,.15);cursor:pointer}
+  .toolbar{display:flex;gap:8px;align-items:center}
+  .count{font-size:12px; opacity:.8}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="side" id="leftTray"><div class="tray-title">Red fences</div></div>
+    <div>
+      <div class="board" id="board">
+        <div class="grid" id="grid"></div>
+        <div class="pawn red" id="pawnR"></div>
+        <div class="pawn gold" id="pawnG"></div>
+      </div>
+      <div class="ui">
+        <div>Turn: <b id="turnLabel">Red</b> · <span class="count">R:<span id="cntR">10</span> G:<span id="cntG">10</span></span></div>
+        <div class="toolbar">
+          <button class="btn" id="rotateBtn">Rotate (R)</button>
+          <button class="btn" id="undoBtn">Undo (Z)</button>
+          <button class="btn" id="redoBtn">Redo (Y)</button>
+          <button class="btn" id="resetBtn">Reset</button>
+        </div>
+      </div>
+    </div>
+    <div class="side" id="rightTray"><div class="tray-title">Gold fences</div></div>
+  </div>
+
+<script>
+/* === CSS numbers === */
+const CELL=parseFloat(css('--cell')), GAP=parseFloat(css('--gap')), PAD=parseFloat(css('--pad')), RAIL=parseFloat(css('--rail'));
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v)}
+
+/* === Elements === */
+const board=document.getElementById('board');
+const gridEl=document.getElementById('grid');
+const leftTray=document.getElementById('leftTray');
+const rightTray=document.getElementById('rightTray');
+const pawnR=document.getElementById('pawnR');
+const pawnG=document.getElementById('pawnG');
+const turnLabel=document.getElementById('turnLabel');
+const rotateBtn=document.getElementById('rotateBtn');
+const resetBtn=document.getElementById('resetBtn');
+const undoBtn=document.getElementById('undoBtn');
+const redoBtn=document.getElementById('redoBtn');
+const cntR=document.getElementById('cntR');
+const cntG=document.getElementById('cntG');
+
+/* === Build grid === */
+for(let r=0;r<9;r++) for(let c=0;c<9;c++){ const d=document.createElement('div'); d.className='cell'; d.dataset.r=r; d.dataset.c=c; gridEl.appendChild(d); }
+
+/* === Geometry === */
+const stride=CELL+GAP;
+const cellCenter=(r,c)=>[PAD+c*stride + CELL/2, PAD+r*stride + CELL/2];
+const cellTopLeft=(r,c)=>[PAD+c*stride, PAD+r*stride];
+function wallPos(orient,r,c){
+  if(orient==='H'){
+    const left = PAD + c*CELL + c*GAP;
+    const top  = PAD + r*CELL + r*GAP + CELL + (GAP-RAIL)/2;
+    return [left, top];
+  }else{
+    const left = PAD + c*CELL + c*GAP + CELL + (GAP-RAIL)/2;
+    const top  = PAD + r*CELL + r*GAP;
+    return [left, top];
+  }
+}
+
+/* === Game state + history === */
+let posR=[8,4], posG=[0,4], turn='R';
+let fencesLeftR=10, fencesLeftG=10;
+const H=new Set(), V=new Set(); // H(r,c) and V(r,c)
+const hK=(r,c)=>`H_${r}_${c}`; const vK=(r,c)=>`V_${r}_${c}`;
+
+const history=[]; const future=[]; // stacks of states
+function snapshot(){
+  return {
+    posR:[...posR], posG:[...posG], turn,
+    fencesLeftR, fencesLeftG,
+    H:[...H], V:[...V]
+  };
+}
+function restore(s){
+  posR=[...s.posR]; posG=[...s.posG]; turn=s.turn;
+  fencesLeftR=s.fencesLeftR; fencesLeftG=s.fencesLeftG;
+  H.clear(); V.clear(); s.H.forEach(k=>H.add(k)); s.V.forEach(k=>V.add(k));
+  renderAll();
+}
+function pushHistory(){ history.push(snapshot()); if(history.length>200) history.shift(); future.length=0; }
+
+/* === Rendering === */
+function renderAll(){
+  // pawns
+  requestAnimationFrame(()=>{ placePawns(); });
+  // fences
+  board.querySelectorAll('.fence:not(.drag)').forEach(n=>n.remove());
+  for(const k of H){ const [,r,c]=k.split('_').map(Number); renderWall('H',r,c); }
+  for(const k of V){ const [,r,c]=k.split('_').map(Number); renderWall('V',r,c); }
+  // trays & labels
+  updateTrays();
+  showMoveHints();
+}
+
+function placePawns(){
+  const [x1,y1]=cellCenter(...posR); pawnR.style.left=x1+'px'; pawnR.style.top=y1+'px';
+  const [x2,y2]=cellCenter(...posG); pawnG.style.left=x2+'px'; pawnG.style.top=y2+'px';
+  pawnR.classList.toggle('current',turn==='R');
+  pawnG.classList.toggle('current',turn==='G');
+  turnLabel.textContent = turn==='R'? 'Red':'Gold';
+  cntR.textContent = fencesLeftR; cntG.textContent = fencesLeftG;
+}
+
+function renderWall(orient,r,c){ const el=document.createElement('div'); el.className='fence '+(orient==='H'?'h':'v'); el.style.position='absolute'; const [L,T]=wallPos(orient,r,c); el.style.left=L+'px'; el.style.top=T+'px'; board.appendChild(el); }
+const crossing=(orient,r,c)=> (orient==='H'? V.has(vK(r,c)) : H.has(hK(r,c)));
+
+function placeWall(orient,r,c,visual=true){
+  if(r<0||r>7||c<0||c>7) return false; // bounds
+  const S = orient==='H'? H:V; const K = orient==='H'? hK(r,c):vK(r,c);
+  if(S.has(K) || crossing(orient,r,c)) return false; // duplicate or crossing
+  // Temp add for path check
+  S.add(K);
+  const ok = hasPath(posR,'R') && hasPath(posG,'G');
+  if(!ok){ S.delete(K); return false; }
+  if(visual) renderWall(orient,r,c);
+  return true;
+}
+
+/* === Movement & blocking === */
+function blockedVerticalEdge(r,c){ // between (r,c) and (r+1,c)
+  return (c>=0&&c<=7 && H.has(hK(r,c))) || (c-1>=0 && H.has(hK(r,c-1)));
+}
+function blockedHorizontalEdge(r,c){ // between (r,c) and (r,c+1)
+  return (r>=0&&r<=7 && V.has(vK(r,c))) || (r-1>=0 && V.has(vK(r-1,c)));
+}
+function neighbors([r,c]){
+  const n=[];
+  if(r>0 && !blockedVerticalEdge(r-1,c)) n.push([r-1,c]);
+  if(r<8 && !blockedVerticalEdge(r,c)) n.push([r+1,c]);
+  if(c>0 && !blockedHorizontalEdge(r,c-1)) n.push([r,c-1]);
+  if(c<8 && !blockedHorizontalEdge(r,c)) n.push([r,c+1]);
+  return n;
+}
+function edgeBlocked(r1,c1,r2,c2){ if(r1===r2){ return blockedHorizontalEdge(r1, Math.min(c1,c2)); } return blockedVerticalEdge(Math.min(r1,r2), c1); }
+function legalPawnMoves(me, opp){
+  const [r,c] = me;
+  const [ro,co] = opp;
+
+  // Step 1: start with all four cardinal directions (if not blocked)
+  const moves = [];
+  if(r > 0 && !blockedVerticalEdge(r-1, c)) moves.push([r-1, c]);
+  if(r < 8 && !blockedVerticalEdge(r, c)) moves.push([r+1, c]);
+  if(c > 0 && !blockedHorizontalEdge(r, c-1)) moves.push([r, c-1]);
+  if(c < 8 && !blockedHorizontalEdge(r, c)) moves.push([r, c+1]);
+
+  // Step 2: if opponent is adjacent, add jump/side options
+  const adj = moves.find(([nr,nc]) => nr===ro && nc===co);
+  if(adj){
+    const dr = ro - r, dc = co - c;
+    const jr = ro + Math.sign(dr), jc = co + Math.sign(dc);
+
+    const straightFree =
+      jr>=0 && jr<=8 && jc>=0 && jc<=8 && !edgeBlocked(ro,co,jr,jc);
+
+    if(straightFree){
+      // Jump over the opponent (OPTIONAL)
+      moves.push([jr, jc]);
+    } else {
+      // Wall or edge behind opponent: diagonal “side jumps”
+      if(dr !== 0){ // opponent above or below
+        if(co > 0 && !blockedHorizontalEdge(ro, co-1) && !edgeBlocked(r,c,ro,co-1))
+          moves.push([ro, co-1]);
+        if(co < 8 && !blockedHorizontalEdge(ro, co) && !edgeBlocked(r,c,ro,co+1))
+          moves.push([ro, co+1]);
+      } else if(dc !== 0){ // opponent left or right
+        if(ro > 0 && !blockedVerticalEdge(ro-1, co) && !edgeBlocked(r,c,ro-1,co))
+          moves.push([ro-1, co]);
+        if(ro < 8 && !blockedVerticalEdge(ro, co) && !edgeBlocked(r,c,ro+1,co))
+          moves.push([ro+1, co]);
+      }
+    }
+
+    // Remove the cell occupied by the opponent itself
+    const idx = moves.findIndex(([nr,nc]) => nr===ro && nc===co);
+    if(idx >= 0) moves.splice(idx, 1);
+  }
+
+  // Step 3: filter out-of-bounds (safety)
+  return moves.filter(([r,c]) => r>=0 && r<=8 && c>=0 && c<=8);
+}
+
+/* === Path finding === */
+function hasPath(start, who){ return shortestPathLen(start, who) < 99; }
+function shortestPathLen(start, who){ const goal=(who==='R'?0:8); const q=[start], seen=new Set([start.join(',')]); let d=0; while(q.length){ const size=q.length; for(let i=0;i<size;i++){ const [r,c]=q.shift(); if(r===goal) return d; for(const [nr,nc] of neighbors([r,c])){ const k=nr+','+nc; if(!seen.has(k)){ seen.add(k); q.push([nr,nc]); } } } d++; } return 99; }
+
+/* === Pawn move hints === */
+let hintEls=[]; function clearHints(){ hintEls.forEach(h=>h.remove()); hintEls=[]; }
+function showMoveHints(){
+  clearHints();
+  const me=turn==='R'?posR:posG, opp=turn==='R'?posG:posR; const moves=legalPawnMoves(me,opp);
+  let best=null,score=1e9; for(const m of moves){ const d=shortestPathLen(m,turn); if(d<score){score=d; best=m;} }
+  for(const p of moves){ const [x,y]=cellTopLeft(...p); const h=document.createElement('div'); h.className='hint-cell'; h.style.left=x+'px'; h.style.top=y+'px'; h.addEventListener('click',()=>tryMoveTo(...p)); board.appendChild(h); hintEls.push(h); }
+  if(best){ const [x,y]=cellTopLeft(...best); const b=document.createElement('div'); b.className='hint-cell best'; b.style.left=x+'px'; b.style.top=y+'px'; b.addEventListener('click',()=>tryMoveTo(...best)); board.appendChild(b); hintEls.push(b); }
+}
+
+/* === Actions === */
+function tryMoveTo(r,c){
+  const me=turn==='R'?posR:posG, opp=turn==='R'?posG:posR; if(!legalPawnMoves(me,opp).some(p=>p[0]===r&&p[1]===c)) return;
+  pushHistory();
+  if(turn==='R') posR=[r,c]; else posG=[r,c];
+  turn = (turn==='R'?'G':'R');
+  renderAll();
+}
+
+// Click cell to move
+board.addEventListener('click',e=>{ const t=e.target; if(!t.classList.contains('cell')) return; const r=parseInt(t.dataset.r,10), c=parseInt(t.dataset.c,10); tryMoveTo(r,c); });
+
+/* === Trays & rotate === */
+function updateTrays(){
+  leftTray.replaceChildren(leftTray.firstChild);
+  rightTray.replaceChildren(rightTray.firstChild);
+  for(let i=0;i<fencesLeftR;i++){ const f=document.createElement('div'); f.className='fence h'; f.dataset.owner='R'; leftTray.appendChild(f); }
+  for(let i=0;i<fencesLeftG;i++){ const f=document.createElement('div'); f.className='fence h'; f.dataset.owner='G'; rightTray.appendChild(f); }
+}
+
+let defaultOrient='H'; // used before/during dragging
+function setRotateLabel(){ rotateBtn.textContent = `Rotate (R) – ${defaultOrient==='H'?'Horizontal':'Vertical'}`; }
+rotateBtn.addEventListener('click',()=>{ defaultOrient = defaultOrient==='H'?'V':'H'; if(drag) setGhostOrient(defaultOrient); setRotateLabel(); });
+window.addEventListener('keydown',e=>{
+  if(e.key==='r' || e.key==='R'){ defaultOrient = defaultOrient==='H'?'V':'H'; if(drag) setGhostOrient(defaultOrient); setRotateLabel(); }
+  if(e.key.toLowerCase()==='z'){ undo(); }
+  if(e.key.toLowerCase()==='y'){ redo(); }
+});
+setRotateLabel();
+
+/* === Dragging (only current player's tray) === */
+let drag=null; // {srcOwner, ghost, orient}
+[leftTray,rightTray].forEach(tray=>{
+  tray.addEventListener('pointerdown',e=>{
+    const t=e.target; if(!t.classList.contains('fence')) return;
+    const owner=t.dataset.owner; if((turn==='R' && owner!=='R') || (turn==='G' && owner!=='G')) return; // can't use other's fences
+    e.preventDefault(); dragStart(owner,e.clientX,e.clientY);
+  });
+});
+
+function dragStart(owner,x,y){
+  drag={srcOwner:owner, ghost:document.createElement('div'), orient:defaultOrient};
+  drag.ghost.className='fence drag '+(drag.orient==='H'?'h':'v');
+  document.body.appendChild(drag.ghost);
+  positionGhost(x,y);
+  window.addEventListener('pointermove',onPointerMove);
+  window.addEventListener('pointerup',onPointerUp,{once:true});
+}
+function setGhostOrient(o){ if(!drag) return; drag.orient=o; drag.ghost.classList.remove('h','v'); drag.ghost.classList.add(o==='H'?'h':'v'); }
+function onPointerMove(e){ if(!drag) return; positionGhost(e.clientX,e.clientY); }
+function onPointerUp(e){ if(!drag) return; const ok=dropFence(e.clientX,e.clientY,drag.orient,drag.srcOwner); drag.ghost.remove(); drag=null; window.removeEventListener('pointermove',onPointerMove); if(ok){ renderAll(); } }
+function positionGhost(x,y){ drag.ghost.style.left=(x-drag.ghost.offsetWidth/2)+'px'; drag.ghost.style.top=(y-drag.ghost.offsetHeight/2)+'px'; }
+function dropFence(cx,cy,orient,owner){
+  const rect=board.getBoundingClientRect(); if(cx<rect.left||cx>rect.right||cy<rect.top||cy>rect.bottom) return false;
+  if((turn==='R' && owner!=='R') || (turn==='G' && owner!=='G')) return false; // safety
+  // Ensure stock
+  if(owner==='R' && fencesLeftR<=0) return false; if(owner==='G' && fencesLeftG<=0) return false;
+  const lx=cx-rect.left-PAD, ly=cy-rect.top-PAD;
+  const r=Math.round((ly - (CELL + GAP/2))/ (CELL+GAP));
+  const c=Math.round((lx - (CELL + GAP/2))/ (CELL+GAP));
+  // Attempt place
+  pushHistory();
+  const ok = placeWall(orient,r,c,true);
+  if(!ok){ history.pop(); return false; }
+  if(owner==='R') fencesLeftR--; else fencesLeftG--; // consume
+  // switch turn
+  turn = (turn==='R'?'G':'R');
+  return true;
+}
+
+/* === Undo / Redo === */
+function undo(){ if(!history.length) return; const cur=snapshot(); future.push(cur); const prev=history.pop(); restore(prev); }
+function redo(){ if(!future.length) return; const cur=snapshot(); history.push(cur); const next=future.pop(); restore(next); }
+undoBtn.addEventListener('click',undo); redoBtn.addEventListener('click',redo);
+
+/* === Reset === */
+resetBtn.addEventListener('click',()=>{ posR=[8,4]; posG=[0,4]; turn='R'; fencesLeftR=10; fencesLeftG=10; H.clear(); V.clear(); history.length=0; future.length=0; renderAll(); });
+
+/* === Init === */
+renderAll();
+</script>
+</body>
+</html>

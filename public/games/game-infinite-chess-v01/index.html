@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Infinite Chessboard (Toggle Modes)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #eee;
+    }
+    #container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      background: radial-gradient(circle at 20% 20%, #666 0, #444 35%, #222 70%, #111 100%);
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #ui-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      pointer-events: auto;
+    }
+    .btn {
+      background: rgba(30,30,30,0.9);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      color: #eee;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:hover {
+      background: rgba(80,80,80,0.9);
+    }
+    .btn:active {
+      transform: translateY(1px);
+    }
+    #info {
+      background: rgba(0,0,0,0.6);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      backdrop-filter: blur(4px);
+      pointer-events: auto;
+    }
+    #bottom-info {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.55);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      pointer-events: none;
+    }
+    /* Promotion dialog */
+    #promotion-dialog {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      pointer-events: none;
+    }
+    #promotion-inner {
+      pointer-events: auto;
+      background: rgba(10,10,10,0.95);
+      border-radius: 10px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,0.3);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 180px;
+      text-align: center;
+      font-size: 13px;
+    }
+    #promotion-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+    }
+    .promo-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(40,40,40,0.9);
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, transform 0.1s;
+      color: #fff;
+    }
+    .promo-btn:hover {
+      background: rgba(90,90,90,0.95);
+    }
+    .promo-btn:active {
+      transform: translateY(1px);
+    }
+  </style>
+</head>
+<body>
+<div id="container">
+  <canvas id="board"></canvas>
+
+  <div id="ui">
+    <div id="info">
+      <div id="turn-display">Turn: White</div>
+      <div id="coord-display">Coord: —</div>
+    </div>
+    <div id="ui-row">
+      <button class="btn" id="btn-reset-game">Reset Game</button>
+      <button class="btn" id="btn-reset-view">Reset View</button>
+      <button class="btn" id="btn-fit-pieces">Fit Pieces</button>
+      <button class="btn" id="btn-toggle-mode">Mode: Infinite</button>
+    </div>
+  </div>
+
+  <div id="bottom-info">
+    Drag to pan, wheel / pinch to zoom (infinite).<br>
+    Toggle between <b>Classic 8×8</b> and <b>Infinite</b> rules with the mode button.
+  </div>
+
+  <!-- Promotion dialog -->
+  <div id="promotion-dialog">
+    <div id="promotion-inner">
+      <div>Promote pawn to:</div>
+      <div id="promotion-buttons">
+        <button class="promo-btn" data-piece="q"></button>
+        <button class="promo-btn" data-piece="r"></button>
+        <button class="promo-btn" data-piece="b"></button>
+        <button class="promo-btn" data-piece="n"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+
+  const turnDisplay = document.getElementById('turn-display');
+  const coordDisplay = document.getElementById('coord-display');
+  const btnResetGame = document.getElementById('btn-reset-game');
+  const btnResetView = document.getElementById('btn-reset-view');
+  const btnFitPieces = document.getElementById('btn-fit-pieces');
+  const btnToggleMode = document.getElementById('btn-toggle-mode');
+
+  const promotionDialog = document.getElementById('promotion-dialog');
+  const promoButtons = Array.from(document.querySelectorAll('.promo-btn'));
+
+  let viewWidth = window.innerWidth;
+  let viewHeight = window.innerHeight;
+  let dpr = window.devicePixelRatio || 1;
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    viewWidth = rect.width;
+    viewHeight = rect.height;
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // ---------- Mode toggle & animation ----------
+
+  let infiniteMode = true; // true = infinite variant, false = classic 8×8
+
+  // modeTransitionT: 0 => fully infinite (no mask), 1 => fully finite (mask fully visible)
+  let modeTransitionT = 0;
+  let targetModeT = 0;
+
+  function updateModeButton() {
+    btnToggleMode.textContent = 'Mode: ' + (infiniteMode ? 'Infinite' : 'Classic 8×8');
+  }
+
+  btnToggleMode.addEventListener('click', () => {
+    infiniteMode = !infiniteMode;
+    updateModeButton();
+    targetModeT = infiniteMode ? 0 : 1; // fade mask out / in
+    gameState.selected = null;
+    gameState.legalMoves = [];
+  });
+
+  // ---------- Sparse infinite board helpers ----------
+
+  function keyFromFR(f, r) { return f + ',' + r; }
+  function parseKey(key) {
+    const [fs, rs] = key.split(',');
+    return { f: parseInt(fs, 10), r: parseInt(rs, 10) };
+  }
+  function forEachPiece(board, fn) {
+    for (const k in board) {
+      const p = board[k];
+      const { f, r } = parseKey(k);
+      fn(f, r, p);
+    }
+  }
+
+  function getBoardExtent(board) {
+    let has = false;
+    let minF = 0, maxF = 7, minR = 0, maxR = 7;
+    forEachPiece(board, (f, r) => {
+      if (!has) {
+        has = true;
+        minF = maxF = f;
+        minR = maxR = r;
+      } else {
+        if (f < minF) minF = f;
+        if (f > maxF) maxF = f;
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+      }
+    });
+    if (!has) {
+      return { minF: 0, maxF: 7, minR: 0, maxR: 7 };
+    }
+    return { minF, maxF, minR, maxR };
+  }
+
+  const RANGE_MARGIN = 64; // big halo for infinite mode
+
+  function withinRange(f, r, ext) {
+    return (
+      f >= ext.minF - RANGE_MARGIN && f <= ext.maxF + RANGE_MARGIN &&
+      r >= ext.minR - RANGE_MARGIN && r <= ext.maxR + RANGE_MARGIN
+    );
+  }
+
+  // ---------- Game State ----------
+
+  const pieceGlyphs = {
+    'w': { k:'\u2654', q:'\u2655', r:'\u2656', b:'\u2657', n:'\u2658', p:'\u2659' },
+    'b': { k:'\u265A', q:'\u265B', r:'\u265C', b:'\u265D', n:'\u265E', p:'\u265F' }
+  };
+
+  const initialCastlingRights = () => ({
+    wK: true, wQ: true, bK: true, bQ: true
+  });
+
+  function createInitialBoard() {
+    const b = {};
+    function put(f, r, type, color) {
+      b[keyFromFR(f, r)] = { type, color };
+    }
+    // White
+    put(0, 0, 'r', 'w');
+    put(1, 0, 'n', 'w');
+    put(2, 0, 'b', 'w');
+    put(3, 0, 'q', 'w');
+    put(4, 0, 'k', 'w');
+    put(5, 0, 'b', 'w');
+    put(6, 0, 'n', 'w');
+    put(7, 0, 'r', 'w');
+    for (let f = 0; f < 8; f++) put(f, 1, 'p', 'w');
+    // Black
+    for (let f = 0; f < 8; f++) put(f, 6, 'p', 'b');
+    put(0, 7, 'r', 'b');
+    put(1, 7, 'n', 'b');
+    put(2, 7, 'b', 'b');
+    put(3, 7, 'q', 'b');
+    put(4, 7, 'k', 'b');
+    put(5, 7, 'b', 'b');
+    put(6, 7, 'n', 'b');
+    put(7, 7, 'r', 'b');
+    return b;
+  }
+
+  let gameState;
+  let pendingPromotion = null;
+
+  function resetGameState() {
+    gameState = {
+      board: createInitialBoard(),
+      turn: 'w',
+      selected: null,
+      legalMoves: [],
+      enPassant: null,
+      castling: initialCastlingRights(),
+      halfmoveClock: 0,
+      fullmoveNumber: 1,
+      lastMove: null,
+      lastHovered: null
+    };
+    pendingPromotion = null;
+    hidePromotionDialog();
+    updateTurnDisplay();
+  }
+
+  function cloneGameState(state) {
+    return JSON.parse(JSON.stringify(state));
+  }
+
+  function getPiece(board, f, r) {
+    return board[keyFromFR(f, r)] || null;
+  }
+
+  function setPiece(board, f, r, piece) {
+    const k = keyFromFR(f, r);
+    if (piece) board[k] = piece;
+    else delete board[k];
+  }
+
+  function findKing(board, color) {
+    let pos = null;
+    forEachPiece(board, (f, r, p) => {
+      if (!pos && p.type === 'k' && p.color === color) {
+        pos = { f, r };
+      }
+    });
+    return pos;
+  }
+
+  function algebraicFromCoords(f, r) {
+    if (f >= 0 && f < 8 && r >= 0 && r < 8) {
+      const file = String.fromCharCode('a'.charCodeAt(0) + f);
+      const rank = (r + 1).toString();
+      return file + rank;
+    }
+    return `(${f}, ${r})`;
+  }
+
+  function isSquareAttacked(board, targetF, targetR, byColor, enPassantSquare) {
+    const ext = infiniteMode ? getBoardExtent(board) : null;
+    const inRange = (f, r) =>
+      infiniteMode ? withinRange(f, r, ext) : (f >= 0 && f < 8 && r >= 0 && r < 8);
+
+    const dir = byColor === 'w' ? 1 : -1;
+
+    // Pawns
+    for (const df of [-1, 1]) {
+      const ff = targetF - df;
+      const rr = targetR - dir;
+      if (!inRange(ff, rr)) continue;
+      const p = getPiece(board, ff, rr);
+      if (p && p.color === byColor && p.type === 'p') return true;
+    }
+
+    // Knights
+    const knightDeltas = [
+      [1,2],[2,1],[-1,2],[-2,1],
+      [1,-2],[2,-1],[-1,-2],[-2,-1]
+    ];
+    for (const [df, dr] of knightDeltas) {
+      const ff = targetF + df;
+      const rr = targetR + dr;
+      if (!inRange(ff, rr)) continue;
+      const p = getPiece(board, ff, rr);
+      if (p && p.color === byColor && p.type === 'n') return true;
+    }
+
+    // Rooks / Queens (orthogonal)
+    const rookDirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    for (const [df, dr] of rookDirs) {
+      let ff = targetF + df;
+      let rr = targetR + dr;
+      while (inRange(ff, rr)) {
+        const p = getPiece(board, ff, rr);
+        if (p) {
+          if (p.color === byColor && (p.type === 'r' || p.type === 'q')) return true;
+          break;
+        }
+        ff += df;
+        rr += dr;
+      }
+    }
+
+    // Bishops / Queens (diagonal)
+    const bishopDirs = [[1,1],[-1,1],[1,-1],[-1,-1]];
+    for (const [df, dr] of bishopDirs) {
+      let ff = targetF + df;
+      let rr = targetR + dr;
+      while (inRange(ff, rr)) {
+        const p = getPiece(board, ff, rr);
+        if (p) {
+          if (p.color === byColor && (p.type === 'b' || p.type === 'q')) return true;
+          break;
+        }
+        ff += df;
+        rr += dr;
+      }
+    }
+
+    // King
+    for (let df = -1; df <= 1; df++) {
+      for (let dr = -1; dr <= 1; dr++) {
+        if (df === 0 && dr === 0) continue;
+        const ff = targetF + df;
+        const rr = targetR + dr;
+        if (!inRange(ff, rr)) continue;
+        const p = getPiece(board, ff, rr);
+        if (p && p.color === byColor && p.type === 'k') return true;
+      }
+    }
+
+    return false;
+  }
+
+  function isInCheck(state, color) {
+    const board = state.board;
+    const kingPos = findKing(board, color);
+    if (!kingPos) return false;
+    return isSquareAttacked(board, kingPos.f, kingPos.r, color === 'w' ? 'b' : 'w', state.enPassant);
+  }
+
+  function generateMovesForPiece(state, fromF, fromR) {
+    const moves = [];
+    const board = state.board;
+    const piece = getPiece(board, fromF, fromR);
+    if (!piece) return moves;
+
+    const color = piece.color;
+    const enemy = color === 'w' ? 'b' : 'w';
+
+    const ext = infiniteMode ? getBoardExtent(board) : null;
+    const inRange = (f, r) =>
+      infiniteMode ? withinRange(f, r, ext) : (f >= 0 && f < 8 && r >= 0 && r < 8);
+
+    function addMove(toF, toR, flags = {}) {
+      if (!inRange(toF, toR)) return;
+      const target = getPiece(board, toF, toR);
+      if (target && target.color === color) return;
+      const move = {
+        fromF, fromR, toF, toR,
+        piece: { ...piece },
+        captured: target ? { ...target } : null,
+        flags
+      };
+      moves.push(move);
+    }
+
+    const isClassicRank = (r) => r >= 0 && r <= 7;
+
+    if (piece.type === 'p') {
+      const dir = color === 'w' ? 1 : -1;
+      const startRank = color === 'w' ? 1 : 6;
+      const promoRank = color === 'w' ? 7 : 0;
+
+      if (!isClassicRank(fromR)) return moves;
+
+      const fwdR = fromR + dir;
+      const leavingClassic = infiniteMode
+        ? (color === 'w' ? (fromR <= 7 && fwdR > 7) : (fromR >= 0 && fwdR < 0))
+        : false;
+
+      if (inRange(fromF, fwdR) && !getPiece(board, fromF, fwdR)) {
+        const shouldPromote = infiniteMode
+          ? (fwdR === promoRank || leavingClassic)
+          : (fwdR === promoRank);
+        if (shouldPromote) {
+          addMove(fromF, fwdR, { promotion: true });
+        } else {
+          if (!infiniteMode && !isClassicRank(fwdR)) {
+            // no move in classic mode if off-board
+          } else {
+            addMove(fromF, fwdR);
+          }
+        }
+
+        if (fromR === startRank) {
+          const dblR = fromR + 2 * dir;
+          if (isClassicRank(dblR) && inRange(fromF, dblR) && !getPiece(board, fromF, dblR)) {
+            addMove(fromF, dblR, { doublePawn: true });
+          }
+        }
+      }
+
+      for (const df of [-1, 1]) {
+        const cf = fromF + df;
+        const cr = fromR + dir;
+        const leavingClassicCapture = infiniteMode
+          ? (color === 'w' ? (fromR <= 7 && cr > 7) : (fromR >= 0 && cr < 0))
+          : false;
+
+        if (!inRange(cf, cr)) continue;
+        const target = getPiece(board, cf, cr);
+        if (target && target.color === enemy) {
+          const shouldPromote = infiniteMode
+            ? (cr === promoRank || leavingClassicCapture)
+            : (cr === promoRank);
+          if (shouldPromote) {
+            addMove(cf, cr, { promotion: true });
+          } else {
+            if (!infiniteMode && !isClassicRank(cr)) {
+              // skip leaving board in classic
+            } else {
+              addMove(cf, cr);
+            }
+          }
+        }
+      }
+
+      if (state.enPassant) {
+        const ep = state.enPassant;
+        if (ep.r === fromR + dir && Math.abs(ep.f - fromF) === 1) {
+          if (inRange(ep.f, ep.r)) {
+            addMove(ep.f, ep.r, { enPassant: true });
+          }
+        }
+      }
+
+    } else if (piece.type === 'n') {
+      const deltas = [
+        [1,2],[2,1],[-1,2],[-2,1],
+        [1,-2],[2,-1],[-1,-2],[-2,-1]
+      ];
+      for (const [df, dr] of deltas) {
+        const ff = fromF + df;
+        const rr = fromR + dr;
+        if (!inRange(ff, rr)) continue;
+        addMove(ff, rr);
+      }
+
+    } else if (piece.type === 'b' || piece.type === 'r' || piece.type === 'q') {
+      const dirs = [];
+      if (piece.type === 'b' || piece.type === 'q') {
+        dirs.push([1,1],[-1,1],[1,-1],[-1,-1]);
+      }
+      if (piece.type === 'r' || piece.type === 'q') {
+        dirs.push([1,0],[-1,0],[0,1],[0,-1]);
+      }
+      for (const [df, dr] of dirs) {
+        let ff = fromF + df;
+        let rr = fromR + dr;
+        while (inRange(ff, rr)) {
+          const target = getPiece(board, ff, rr);
+          if (!target) {
+            addMove(ff, rr);
+          } else {
+            if (target.color === enemy) addMove(ff, rr);
+            break;
+          }
+          ff += df;
+          rr += dr;
+        }
+      }
+
+    } else if (piece.type === 'k') {
+      for (let df = -1; df <= 1; df++) {
+        for (let dr = -1; dr <= 1; dr++) {
+          if (df === 0 && dr === 0) continue;
+          const ff = fromF + df;
+          const rr = fromR + dr;
+          if (!inRange(ff, rr)) continue;
+          addMove(ff, rr);
+        }
+      }
+
+      const rights = state.castling;
+      const rank = (color === 'w') ? 0 : 7;
+      if (fromR === rank && fromF === 4) {
+        if ((color === 'w' && rights.wK) || (color === 'b' && rights.bK)) {
+          const pathClear = !getPiece(board,5,rank) && !getPiece(board,6,rank);
+          if (pathClear) {
+            const enemyColor = enemy;
+            const squaresSafe =
+              !isSquareAttacked(board,4,rank,enemyColor,state.enPassant) &&
+              !isSquareAttacked(board,5,rank,enemyColor,state.enPassant) &&
+              !isSquareAttacked(board,6,rank,enemyColor,state.enPassant);
+            if (squaresSafe) addMove(6, rank, { castleKingSide: true });
+          }
+        }
+        if ((color === 'w' && rights.wQ) || (color === 'b' && rights.bQ)) {
+          const pathClear = !getPiece(board,3,rank) && !getPiece(board,2,rank) && !getPiece(board,1,rank);
+          if (pathClear) {
+            const enemyColor = enemy;
+            const squaresSafe =
+              !isSquareAttacked(board,4,rank,enemyColor,state.enPassant) &&
+              !isSquareAttacked(board,3,rank,enemyColor,state.enPassant) &&
+              !isSquareAttacked(board,2,rank,enemyColor,state.enPassant);
+            if (squaresSafe) addMove(2, rank, { castleQueenSide: true });
+          }
+        }
+      }
+    }
+
+    const legal = [];
+    for (const mv of moves) {
+      const newState = cloneGameState(state);
+      applyMoveInPlace(newState, mv, mv.flags.promotion ? (mv.promotionType || 'q') : null, true);
+      if (!isInCheck(newState, color)) legal.push(mv);
+    }
+
+    return legal;
+  }
+
+  function applyMoveInPlace(state, move, promotionType = null, skipCheckUpdate = false) {
+    const board = state.board;
+    const { fromF, fromR, toF, toR, piece, flags } = move;
+    const color = piece.color;
+    const enemy = color === 'w' ? 'b' : 'w';
+
+    state.enPassant = null;
+
+    if (flags.enPassant) {
+      const dir = color === 'w' ? 1 : -1;
+      const capR = toR - dir;
+      setPiece(board, toF, capR, null);
+    }
+
+    if (flags.castleKingSide) {
+      const rank = color === 'w' ? 0 : 7;
+      setPiece(board, 4, rank, null);
+      setPiece(board, 6, rank, piece);
+      const rook = getPiece(board, 7, rank);
+      setPiece(board, 7, rank, null);
+      setPiece(board, 5, rank, rook);
+
+    } else if (flags.castleQueenSide) {
+      const rank = color === 'w' ? 0 : 7;
+      setPiece(board, 4, rank, null);
+      setPiece(board, 2, rank, piece);
+      const rook = getPiece(board, 0, rank);
+      setPiece(board, 0, rank, null);
+      setPiece(board, 3, rank, rook);
+
+    } else {
+      setPiece(board, fromF, fromR, null);
+      if (flags.promotion) {
+        const promotedType = promotionType || 'q';
+        setPiece(board, toF, toR, { type: promotedType, color });
+      } else {
+        setPiece(board, toF, toR, piece);
+      }
+    }
+
+    if (piece.type === 'k') {
+      if (color === 'w') {
+        state.castling.wK = false;
+        state.castling.wQ = false;
+      } else {
+        state.castling.bK = false;
+        state.castling.bQ = false;
+      }
+    } else if (piece.type === 'r') {
+      const rank = color === 'w' ? 0 : 7;
+      if (fromR === rank && fromF === 0) {
+        if (color === 'w') state.castling.wQ = false; else state.castling.bQ = false;
+      } else if (fromR === rank && fromF === 7) {
+        if (color === 'w') state.castling.wK = false; else state.castling.bK = false;
+      }
+    }
+
+    if (move.captured && move.captured.type === 'r') {
+      const rank = enemy === 'w' ? 0 : 7;
+      if (toR === rank && toF === 0) {
+        if (enemy === 'w') state.castling.wQ = false; else state.castling.bQ = false;
+      } else if (toR === rank && toF === 7) {
+        if (enemy === 'w') state.castling.wK = false; else state.castling.bK = false;
+      }
+    }
+
+    if (flags.doublePawn) {
+      const dir = color === 'w' ? 1 : -1;
+      state.enPassant = { f: fromF, r: fromR + dir };
+    }
+
+    if (piece.type === 'p' || move.captured) state.halfmoveClock = 0;
+    else state.halfmoveClock++;
+
+    if (!skipCheckUpdate) {
+      state.turn = enemy;
+      if (enemy === 'w') state.fullmoveNumber++;
+      state.lastMove = { fromF, fromR, toF, toR, color };
+      state.selected = null;
+      state.legalMoves = [];
+    }
+  }
+
+  function updateTurnDisplay() {
+    turnDisplay.textContent = 'Turn: ' + (gameState.turn === 'w' ? 'White' : 'Black');
+  }
+
+  // ---------- Camera / board rendering (infinite, log LOD base 8) ----------
+
+  const baseTileSize = 64;
+  const MIN_ZOOM = 1e-44;
+  const MAX_ZOOM = 1e1;
+
+  let cameraX = 3.5;
+  let cameraY = 3.5;
+  let cameraZoom = 1;
+
+  let targetCameraX = cameraX;
+  let targetCameraY = cameraY;
+  let targetCameraZoom = cameraZoom;
+  let cameraAnimating = false;
+
+  function resetView(animated = true) {
+    const centerX = 3.5;
+    const centerY = 3.5;
+    const zoom = 1.1;
+    setCameraTarget(centerX, centerY, zoom, animated);
+  }
+
+  function setCameraTarget(x, y, zoom, animated = true) {
+    targetCameraX = x;
+    targetCameraY = y;
+    targetCameraZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+    if (!animated) {
+      cameraX = targetCameraX;
+      cameraY = targetCameraY;
+      cameraZoom = targetCameraZoom;
+      cameraAnimating = false;
+    } else {
+      cameraAnimating = true;
+    }
+  }
+
+  function worldToScreen(wx, wy) {
+    const scale = baseTileSize * cameraZoom;
+    const sx = (wx - cameraX) * scale + viewWidth / 2;
+    const sy = (wy - cameraY) * scale + viewHeight / 2;
+    return { x: sx, y: sy };
+  }
+
+  function screenToWorld(sx, sy) {
+    const scale = baseTileSize * cameraZoom;
+    const wx = (sx - viewWidth / 2) / scale + cameraX;
+    const wy = (sy - viewHeight / 2) / scale + cameraY;
+    return { x: wx, y: wy };
+  }
+
+  function boardToWorld(f, r) {
+    return { wx: f + 0.5, wy: r + 0.5 };
+  }
+
+  function worldSquareFromCoords(f, r) {
+    return { wx0: f, wy0: r, wx1: f + 1, wy1: r + 1 };
+  }
+
+  function screenToBoardSquare(sx, sy) {
+    const { x: wx, y: wy } = screenToWorld(sx, sy);
+    const ff = Math.floor(wx);
+    const rr = Math.floor(wy);
+    return { f: ff, r: rr };
+  }
+
+  function fitCameraToPieces(animated = true) {
+    const pieces = [];
+    forEachPiece(gameState.board, (f, r) => {
+      const { wx, wy } = boardToWorld(f, r);
+      pieces.push({ wx, wy });
+    });
+    if (pieces.length === 0) {
+      resetView(animated);
+      return;
+    }
+    let minX = pieces[0].wx, maxX = pieces[0].wx;
+    let minY = pieces[0].wy, maxY = pieces[0].wy;
+    for (const p of pieces) {
+      if (p.wx < minX) minX = p.wx;
+      if (p.wx > maxX) maxX = p.wx;
+      if (p.wy < minY) minY = p.wy;
+      if (p.wy > maxY) maxY = p.wy;
+    }
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const spanX = Math.max(2, maxX - minX + 1);
+    const spanY = Math.max(2, maxY - minY + 1);
+
+    const margin = 0.8;
+    let zoom = Math.min(
+      (viewWidth * margin) / (baseTileSize * spanX),
+      (viewHeight * margin) / (baseTileSize * spanY)
+    );
+    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+
+    setCameraTarget(centerX, centerY, zoom, animated);
+  }
+
+  // ---------- Input Handling ----------
+
+  let isDragging = false;
+  let lastDragX = 0;
+  let lastDragY = 0;
+
+  let pinchActive = false;
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let pinchCenter = { x: 0, y: 0 };
+
+  function getTouchDistance(t1, t2) {
+    const dx = t2.clientX - t1.clientX;
+    const dy = t2.clientY - t1.clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  function getTouchCenter(t1, t2) {
+    return {
+      x: (t1.clientX + t2.clientX) / 2,
+      y: (t1.clientY + t2.clientY) / 2
+    };
+  }
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (pendingPromotion) return;
+    isDragging = true;
+    lastDragX = e.clientX;
+    lastDragY = e.clientY;
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (isDragging && !pendingPromotion) {
+      const dx = e.clientX - lastDragX;
+      const dy = e.clientY - lastDragY;
+      lastDragX = e.clientX;
+      lastDragY = e.clientY;
+
+      const scale = baseTileSize * cameraZoom;
+      cameraX -= dx / scale;
+      cameraY -= dy / scale;
+      targetCameraX = cameraX;
+      targetCameraY = cameraY;
+      targetCameraZoom = cameraZoom;
+      cameraAnimating = false;
+    }
+
+    const sq = screenToBoardSquare(x, y);
+    if (sq) gameState.lastHovered = { f: sq.f, r: sq.r };
+    else gameState.lastHovered = null;
+  });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (pendingPromotion) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const wheel = e.deltaY < 0 ? 1 : -1;
+    const zoomFactor = Math.exp(wheel * 0.2);
+
+    const before = screenToWorld(mx, my);
+    cameraZoom *= zoomFactor;
+    cameraZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cameraZoom));
+    targetCameraZoom = cameraZoom;
+    cameraAnimating = false;
+
+    const after = screenToWorld(mx, my);
+    cameraX += before.x - after.x;
+    cameraY += before.y - after.y;
+    targetCameraX = cameraX;
+    targetCameraY = cameraY;
+  }, { passive: false });
+
+  let lastClickTime = 0;
+
+  function handleClick(x, y) {
+    if (pendingPromotion) return;
+    const sq = screenToBoardSquare(x, y);
+    if (!sq) return;
+    const { f, r } = sq;
+    const board = gameState.board;
+    const clickedPiece = getPiece(board, f, r);
+
+    if (gameState.selected) {
+      const move = gameState.legalMoves.find(m => m.toF === f && m.toR === r);
+      if (move) {
+        if (move.flags && move.flags.promotion) {
+          showPromotionDialog(move);
+          return;
+        }
+        applyMoveInPlace(gameState, move);
+        updateTurnDisplay();
+        return;
+      }
+      gameState.selected = null;
+      gameState.legalMoves = [];
+    }
+
+    if (clickedPiece && clickedPiece.color === gameState.turn) {
+      gameState.selected = { f, r };
+      gameState.legalMoves = generateMovesForPiece(gameState, f, r);
+    } else {
+      gameState.selected = null;
+      gameState.legalMoves = [];
+    }
+  }
+
+  canvas.addEventListener('click', (e) => {
+    const now = performance.now();
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const sq = screenToBoardSquare(x, y);
+    const piece = sq ? getPiece(gameState.board, sq.f, sq.r) : null;
+    if (now - lastClickTime < 280 && !piece && !pendingPromotion) {
+      fitCameraToPieces(true);
+    } else {
+      handleClick(x, y);
+    }
+    lastClickTime = now;
+  });
+
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (pendingPromotion) return;
+    const touches = e.touches;
+    if (touches.length === 1) {
+      isDragging = true;
+      pinchActive = false;
+      lastDragX = touches[0].clientX;
+      lastDragY = touches[0].clientY;
+    } else if (touches.length === 2) {
+      isDragging = false;
+      pinchActive = true;
+      pinchStartDist = getTouchDistance(touches[0], touches[1]);
+      pinchStartZoom = cameraZoom;
+      pinchCenter = getTouchCenter(touches[0], touches[1]);
+      cameraAnimating = false;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (pendingPromotion) return;
+    const touches = e.touches;
+    if (touches.length === 1 && isDragging && !pinchActive) {
+      const t = touches[0];
+      const dx = t.clientX - lastDragX;
+      const dy = t.clientY - lastDragY;
+      lastDragX = t.clientX;
+      lastDragY = t.clientY;
+
+      const scale = baseTileSize * cameraZoom;
+      cameraX -= dx / scale;
+      cameraY -= dy / scale;
+      targetCameraX = cameraX;
+      targetCameraY = cameraY;
+      targetCameraZoom = cameraZoom;
+      cameraAnimating = false;
+    } else if (touches.length === 2) {
+      pinchActive = true;
+      const newDist = getTouchDistance(touches[0], touches[1]);
+      const factor = newDist / pinchStartDist;
+      const rect = canvas.getBoundingClientRect();
+      const cx = pinchCenter.x - rect.left;
+      const cy = pinchCenter.y - rect.top;
+
+      const before = screenToWorld(cx, cy);
+      cameraZoom = pinchStartZoom * factor;
+      cameraZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cameraZoom));
+      const after = screenToWorld(cx, cy);
+      cameraX += before.x - after.x;
+      cameraY += before.y - after.y;
+      targetCameraX = cameraX;
+      targetCameraY = cameraY;
+      targetCameraZoom = cameraZoom;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0) {
+      isDragging = false;
+      pinchActive = false;
+    }
+  });
+
+  // ---------- Buttons ----------
+
+  btnResetGame.addEventListener('click', () => {
+    resetGameState();
+  });
+
+  btnResetView.addEventListener('click', () => {
+    resetView(true);
+  });
+
+  btnFitPieces.addEventListener('click', () => {
+    fitCameraToPieces(true);
+  });
+
+  // ---------- Promotion dialog ----------
+
+  function showPromotionDialog(move) {
+    pendingPromotion = move;
+    const color = move.piece.color;
+    const types = ['q', 'r', 'b', 'n'];
+    types.forEach((t, i) => {
+      const btn = promoButtons[i];
+      btn.dataset.piece = t;
+      btn.textContent = pieceGlyphs[color][t];
+    });
+    promotionDialog.style.display = 'flex';
+  }
+
+  function hidePromotionDialog() {
+    promotionDialog.style.display = 'none';
+    pendingPromotion = null;
+  }
+
+  promoButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!pendingPromotion) return;
+      const type = btn.dataset.piece || 'q';
+      const move = pendingPromotion;
+      move.promotionType = type;
+      applyMoveInPlace(gameState, move, type);
+      hidePromotionDialog();
+      updateTurnDisplay();
+    });
+  });
+
+  // ---------- Off-screen arrows ----------
+
+  function computeOffscreenArrows() {
+    const arrows = [];
+    forEachPiece(gameState.board, (f, r, piece) => {
+      const { wx, wy } = boardToWorld(f, r);
+      const { x, y } = worldToScreen(wx, wy);
+      const margin = 10;
+      if (x >= -margin && x <= viewWidth + margin && y >= -margin && y <= viewHeight + margin) return;
+
+      const cx = viewWidth / 2;
+      const cy = viewHeight / 2;
+      const dx = x - cx;
+      const dy = y - cy;
+      if (dx === 0 && dy === 0) return;
+
+      const candidates = [];
+      if (dx > 0) {
+        const t = (viewWidth - cx) / dx;
+        candidates.push({ t, x: viewWidth, y: cy + t * dy });
+      } else if (dx < 0) {
+        const t = -cx / dx;
+        candidates.push({ t, x: 0, y: cy + t * dy });
+      }
+      if (dy > 0) {
+        const t = (viewHeight - cy) / dy;
+        candidates.push({ t, x: cx + t * dx, y: viewHeight });
+      } else if (dy < 0) {
+        const t = -cy / dy;
+        candidates.push({ t, x: cx + t * dx, y: 0 });
+      }
+      let best = null;
+      for (const c of candidates) {
+        if (c.t > 0) {
+          if (!best || c.t < best.t) best = c;
+        }
+      }
+      if (!best) return;
+      const tipX = Math.max(0, Math.min(viewWidth, best.x));
+      const tipY = Math.max(0, Math.min(viewHeight, best.y));
+      const angle = Math.atan2(dy, dx);
+      arrows.push({ x: tipX, y: tipY, angle, piece });
+    });
+    return arrows;
+  }
+
+  function drawOffscreenArrows(arrows) {
+    const arrowLen = 18;
+    const stemLen = 12;
+    const baseWidth = 10;
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.font = '16px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (const a of arrows) {
+      const { x, y, angle, piece } = a;
+      const color = piece.color === 'w' ? '#f0f0f0' : '#111111';
+      const shadow = piece.color === 'w' ? '#000000' : '#ffffff';
+
+      const nx = Math.cos(angle);
+      const ny = Math.sin(angle);
+
+      const tipX = x;
+      const tipY = y;
+
+      const baseX = tipX - nx * arrowLen;
+      const baseY = tipY - ny * arrowLen;
+
+      const perpX = -ny;
+      const perpY = nx;
+      const p1x = baseX + perpX * (baseWidth / 2);
+      const p1y = baseY + perpY * (baseWidth / 2);
+      const p2x = baseX - perpX * (baseWidth / 2);
+      const p2y = baseY - perpY * (baseWidth / 2);
+
+      const stemEndX = baseX - nx * stemLen;
+      const stemEndY = baseY - ny * stemLen;
+
+      // Shadow
+      ctx.beginPath();
+      ctx.moveTo(tipX + 1, tipY + 1);
+      ctx.lineTo(p1x + 1, p1y + 1);
+      ctx.lineTo(p2x + 1, p2y + 1);
+      ctx.closePath();
+      ctx.fillStyle = shadow;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(baseX + 1, baseY + 1);
+      ctx.lineTo(stemEndX + 1, stemEndY + 1);
+      ctx.strokeStyle = shadow;
+      ctx.stroke();
+
+      // Main triangle
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(p1x, p1y);
+      ctx.lineTo(p2x, p2y);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      // Stem
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.lineTo(stemEndX, stemEndY);
+      ctx.strokeStyle = color;
+      ctx.stroke();
+
+      // Glyph
+      const glyphOffset = arrowLen + stemLen + 8;
+      const gx = tipX - nx * glyphOffset;
+      const gy = tipY - ny * glyphOffset;
+      const glyph = pieceGlyphs[piece.color][piece.type];
+      ctx.fillStyle = shadow;
+      ctx.fillText(glyph, gx + 1, gy + 1);
+      ctx.fillStyle = color;
+      ctx.fillText(glyph, gx, gy);
+    }
+
+    ctx.restore();
+  }
+
+  // ---------- Board rendering (logarithmic LOD with base 8) ----------
+
+  const lightColor = '#f0d9b5';
+  const darkColor = '#b58863';
+  const lightFarColor = '#d8c6a0';
+  const darkFarColor = '#a27655';
+
+  function drawBoardLevel(step, scale) {
+    const worldMinX = cameraX + (0 - viewWidth / 2) / scale;
+    const worldMaxX = cameraX + (viewWidth - viewWidth / 2) / scale;
+    const worldMinY = cameraY + (0 - viewHeight / 2) / scale;
+    const worldMaxY = cameraY + (viewHeight - viewHeight / 2) / scale;
+
+    const startX = Math.floor(worldMinX / step) * step;
+    const endX = Math.ceil(worldMaxX / step) * step;
+    const startY = Math.floor(worldMinY / step) * step;
+    const endY = Math.ceil(worldMaxY / step) * step;
+
+    const far = step >= 8;
+    const light = far ? lightFarColor : lightColor;
+    const dark = far ? darkFarColor : darkColor;
+
+    for (let x = startX; x <= endX; x += step) {
+      for (let y = startY; y <= endY; y += step) {
+        const tileX = Math.floor(x / step);
+        const tileY = Math.floor(y / step);
+        const baseParity = (tileX + tileY) & 1;
+        const color = baseParity === 0 ? light : dark;
+        const { x: sx0, y: sy0 } = worldToScreen(x, y);
+        const { x: sx1, y: sy1 } = worldToScreen(x + step, y + step);
+        ctx.fillStyle = color;
+        ctx.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+      }
+    }
+  }
+
+  function drawBoard() {
+    const scale = baseTileSize * cameraZoom;
+    const referencePixelSize = 60;
+    const ratio = referencePixelSize / scale;
+
+    ctx.save();
+
+    if (ratio <= 1) {
+      ctx.globalAlpha = 1;
+      drawBoardLevel(1, scale);
+    } else {
+      const levelExp = Math.log(ratio) / Math.log(8); // base 8
+      const l0 = Math.floor(levelExp);
+      const l1 = l0 + 1;
+      const t = levelExp - l0;
+      const step0 = Math.max(1, Math.pow(8, l0));
+      const step1 = Math.max(1, Math.pow(8, l1));
+
+      ctx.globalAlpha = 1 - t;
+      drawBoardLevel(step0, scale);
+
+      ctx.globalAlpha = t;
+      drawBoardLevel(step1, scale);
+    }
+
+    ctx.restore();
+
+    // Outline classic 8×8 for reference
+    const borderSq = worldSquareFromCoords(0, 0);
+    const { x: sx0, y: sy0 } = worldToScreen(borderSq.wx0, borderSq.wy0);
+    const { x: sx1, y: sy1 } = worldToScreen(borderSq.wx1 + 7, borderSq.wy1 + 7);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+    ctx.restore();
+
+    // Smooth mask: hide outside 8x8 when in classic mode (animated)
+    if (modeTransitionT > 0.01) {
+      const alpha = 0.65 * modeTransitionT;
+      ctx.save();
+      // draw dark overlay
+      ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+      ctx.fillRect(0, 0, viewWidth, viewHeight);
+
+      // cut out the 8x8 region so it's visible
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+      ctx.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+
+      ctx.restore();
+    }
+  }
+
+  function drawPieces() {
+    ctx.save();
+    const scale = baseTileSize * cameraZoom;
+    const fontSize = Math.max(18, scale * 0.7);
+    ctx.font = `${fontSize}px "Segoe UI Symbol", "Noto Chess", system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    forEachPiece(gameState.board, (f, r, piece) => {
+      const { wx, wy } = boardToWorld(f, r);
+      const { x, y } = worldToScreen(wx, wy);
+      const margin = scale * 0.15;
+      if (x < -margin || x > viewWidth + margin || y < -margin || y > viewHeight + margin) return;
+
+      const glyph = pieceGlyphs[piece.color][piece.type];
+      const fill = piece.color === 'w' ? '#ffffff' : '#111111';
+      const shadow = piece.color === 'w' ? '#000000' : '#ffffff';
+
+      ctx.fillStyle = shadow;
+      ctx.fillText(glyph, x + 2, y + 2);
+      ctx.fillStyle = fill;
+      ctx.fillText(glyph, x, y);
+    });
+
+    ctx.restore();
+  }
+
+  function drawHighlights() {
+    const scale = baseTileSize * cameraZoom;
+    const board = gameState.board;
+
+    if (gameState.lastMove) {
+      const { fromF, fromR, toF, toR } = gameState.lastMove;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,0,0.2)';
+      for (const [f, r] of [[fromF, fromR], [toF, toR]]) {
+        const sq = worldSquareFromCoords(f, r);
+        const { x: sx0, y: sy0 } = worldToScreen(sq.wx0, sq.wy0);
+        const { x: sx1, y: sy1 } = worldToScreen(sq.wx1, sq.wy1);
+        ctx.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+      }
+      ctx.restore();
+    }
+
+    if (gameState.selected) {
+      const { f, r } = gameState.selected;
+      ctx.save();
+      const selectColor = 'rgba(50, 180, 255, 0.35)';
+      const moveColor = 'rgba(50, 180, 255, 0.55)';
+      const captureColor = 'rgba(255, 80, 80, 0.55)';
+
+      const sq = worldSquareFromCoords(f, r);
+      const { x: sx0, y: sy0 } = worldToScreen(sq.wx0, sq.wy0);
+      const { x: sx1, y: sy1 } = worldToScreen(sq.wx1, sq.wy1);
+      ctx.fillStyle = selectColor;
+      ctx.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
+
+      ctx.strokeStyle = moveColor;
+      ctx.fillStyle = moveColor;
+      const radius = Math.max(4, scale * 0.15);
+
+      for (const mv of gameState.legalMoves) {
+        const { toF, toR } = mv;
+        const sq2 = worldSquareFromCoords(toF, toR);
+        const center = {
+          x: (sq2.wx0 + sq2.wx1) / 2,
+          y: (sq2.wy0 + sq2.wy1) / 2
+        };
+        const { x: cx, y: cy } = worldToScreen(center.x, center.y);
+        const targetPiece = getPiece(board, toF, toR);
+        if (targetPiece) {
+          ctx.strokeStyle = captureColor;
+          ctx.lineWidth = 2;
+          const { x: sx, y: sy } = worldToScreen(sq2.wx0, sq2.wy0);
+          const { x: sx2, y: sy2 } = worldToScreen(sq2.wx1, sq2.wy1);
+          ctx.strokeRect(sx + 2, sy + 2, sx2 - sx - 4, sy2 - sy - 4);
+        } else {
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      ctx.restore();
+    }
+  }
+
+  function drawCoordinateOverlay() {
+    let text = 'Coord: —';
+    const sq = gameState.lastHovered;
+    if (sq) {
+      const { f, r } = sq;
+      text = 'Coord: ' + algebraicFromCoords(f, r);
+    }
+    coordDisplay.textContent = text;
+  }
+
+  // ---------- Main loop ----------
+
+  let lastTime = performance.now();
+
+  function step(timestamp) {
+    const dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+
+    if (cameraAnimating) {
+      const speed = 8;
+      const zoomSpeed = 8;
+      const dx = targetCameraX - cameraX;
+      const dy = targetCameraY - cameraY;
+      const dz = targetCameraZoom - cameraZoom;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 0.001 && Math.abs(dz) < 0.001) {
+        cameraX = targetCameraX;
+        cameraY = targetCameraY;
+        cameraZoom = targetCameraZoom;
+        cameraAnimating = false;
+      } else {
+        cameraX += dx * Math.min(1, dt * speed);
+        cameraY += dy * Math.min(1, dt * speed);
+        cameraZoom += dz * Math.min(1, dt * zoomSpeed);
+      }
+    }
+
+    // animate mode mask
+    const modeSpeed = 6;
+    const dm = targetModeT - modeTransitionT;
+    if (Math.abs(dm) > 0.001) {
+      modeTransitionT += dm * Math.min(1, dt * modeSpeed);
+    } else {
+      modeTransitionT = targetModeT;
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, viewWidth, viewHeight);
+
+    drawBoard();
+    drawPieces();
+
+    const arrows = computeOffscreenArrows();
+    drawOffscreenArrows(arrows);
+
+    drawHighlights();
+    drawCoordinateOverlay();
+
+    requestAnimationFrame(step);
+  }
+
+  // ---------- Init ----------
+
+  resetGameState();
+  resetView(false);
+  updateModeButton();
+  requestAnimationFrame(step);
+
+})();
+</script>
+</body>
+</html>

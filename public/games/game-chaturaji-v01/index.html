@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Chaturaji – 4-Player (chess.com style)</title>
+<style>
+  :root{
+    --board-size: 380px;   /* each board */
+    --piece-scale: 0.92;
+    --gap: 14px;
+    --chk: #ff3d00;
+  }
+  html,body{margin:0;padding:0;background:#404040;color:#111;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  #app{display:grid;gap:12px;padding:12px;max-width:1800px;margin:0 auto}
+  #hud{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #turnInfo{padding:8px 12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  #statusBar{flex:1;min-height:24px;padding:8px 12px;background:#fff;border-left:6px solid #7c4dff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  #statusBar.warn{border-color:#ff9800}
+  #statusBar.error{border-color:#e53935}
+
+  #timerControls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .clock{padding:8px 10px;background:#d0d0d0;border-radius:10px;box-shadow:0 4px 3px rgba(10,10,10,.2);min-width:120px;display:flex;justify-content:space-between;align-items:center;font-variant-numeric:tabular-nums}
+  .clock strong{font-size:32px}
+
+  #scoreRow{display:flex;gap:8px;flex-wrap:wrap}
+  .scoreTag{padding:8px 10px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);font-weight:700}
+  .scoreTag.out{opacity:.5;text-decoration:line-through}
+
+  /* 4×1 boards row */
+  #boardsGrid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:var(--gap);
+    align-items:start;
+  }
+  @media (max-width: 1400px){ :root{ --board-size: 320px; } }
+  @media (max-width: 1200px){ :root{ --board-size: 280px; } }
+  @media (max-width: 1000px){ :root{ --board-size: 240px; } }
+  @media (max-width: 860px){ #boardsGrid{ grid-template-columns:1fr; } }
+
+  .boardWrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .who{font-weight:700;font-size:14px; color: #ffffff;}
+
+  section.board{
+    width:var(--board-size); height:var(--board-size); aspect-ratio:1/1;
+    background:#fff;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.07);
+    display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+    position:relative;overflow:hidden;
+  }
+  section.board.active{box-shadow:0 0 0 6px rgba(255,155,25,.95),0 2px 6px rgba(0,0,0,.07)}
+  section.board.inactive{opacity:.6;filter:saturate(.85) grayscale(.05)}
+  section.board.inactive .square{pointer-events:none}
+  .square{position:relative;user-select:none;-webkit-user-select:none;touch-action:manipulation;display:flex;align-items:center;justify-content:center;font-size:calc((var(--board-size)/8*var(--piece-scale)));line-height:1}
+  .square.light{background:#ffffff} .square.dark{background:#a0a0a0}
+  .square.hint{ box-shadow: inset 0 0 0 9px teal }
+  .square.selected{ outline:2px solid rgba(124,77,255,.7); outline-offset:-2px }
+  .square.lastmove{ outline:6px solid rgba(255,215,0,.55); outline-offset:-6px }
+  .square.incheck{ box-shadow: inset 0 0 0 4px var(--chk); }
+
+  /* Unicode chess pieces with color per side */
+  .piece{width:100%;height:100%;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 1px rgba(0,0,0,.15))}
+  .piece::after{font-size:85%}
+  .k::after{content:"\265A"} .q::after{content:"\265B"}
+  .r::after{content:"\265C"} .b::after{content:"\265D"}
+  .n::after{content:"\265E"} .p::after{content:"\265F"}
+
+  /* four colors (text color of glyph) */
+  .c-red   { color:#d32f2f }
+  .c-blue  { color:#1976d2 }
+  .c-yellow{ color:#fbc02d }
+  .c-green { color:#388e3c }
+
+  /* ghost pieces (eliminated side) */
+  .ghost{ opacity:.70; filter:grayscale(100%); }
+  .ghostCaptureAnim{ animation: blink 0.4s linear 1; }
+  @keyframes blink{ 50%{opacity:.15} }
+
+
+  /* size controls */
+  #sizeControls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:8px 12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div id="turnInfo">Turn: <b id="turnSide">Red</b></div>
+    <div id="statusBar" aria-live="polite">Ready. Tap a piece to see its legal moves.</div>
+  </div>
+
+  <div id="timerControls">
+    <label>Minutes per side: <input id="minutesInput" type="number" min="1" max="180" step="1" style="width:80px" value="10"></label>
+    <label>Increment (sec): <input id="incrementInput" type="number" min="0" max="60" step="1" style="width:80px" value="0"></label>
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="resetBtn">Reset</button>
+    <hr>
+    <div class="clock"><span>Red ⏱</span> <strong id="redClock" style="color:red;">10:00</strong></div>
+    <div class="clock"><span>Blue ⏱</span> <strong id="blueClock" style="color:blue;">10:00</strong></div>
+    <div class="clock"><span>Yellow ⏱</span> <strong id="yellowClock" style="color:yellow;">10:00</strong></div>
+    <div class="clock"><span>Green ⏱</span> <strong id="greenClock" style="color:green;">10:00</strong></div>
+  </div>
+
+  <div id="scoreRow">
+    <div class="scoreTag" id="score-r">Red: <span>0</span></div>
+    <div class="scoreTag" id="score-b">Blue: <span>0</span></div>
+    <div class="scoreTag" id="score-y">Yellow: <span>0</span></div>
+    <div class="scoreTag" id="score-g">Green: <span>0</span></div>
+  </div>
+
+  <div id="boardsGrid">
+    <div class="boardWrap">
+      
+      <section id="boardRed" class="board" data-side="r"></section>
+      <div class="who">Red</div>
+    </div>
+    <div class="boardWrap">
+      <section id="boardBlue" class="board" data-side="b"></section>
+      <div class="who">Blue</div>
+    </div>
+    <div class="boardWrap">
+      <section id="boardYellow" class="board" data-side="y"></section>
+      <div class="who">Yellow</div>
+    </div>
+    <div class="boardWrap">
+      <section id="boardGreen" class="board" data-side="g"></section>
+      <div class="who">Green</div>
+    </div>
+  </div>
+
+  <div id="sizeControls">
+    <strong>Board & Pieces</strong>
+    <label style="display:flex;gap:8px;align-items:center;">
+      Board: <input id="boardSizeSlider" type="range" min="160" max="900" step="10" value="380">
+      <input id="boardSizeNumber" type="number" min="160" max="900" step="10" value="250" style="width:80px">
+      <span>px</span>
+    </label>
+    <label style="display:flex;gap:8px;align-items:center;">
+      Pieces: <input id="pieceScaleSlider" type="range" min="0.60" max="1.20" step="0.01" value="0.92">
+      <input id="pieceScaleNumber" type="number" min="0.60" max="1.20" step="0.01" value="0.92" style="width:80px">
+      <span>× square</span>
+    </label>
+  </div>
+</div>
+
+<script>
+/* ==== Constants & helpers ==== */
+const COLORS = ['r','b','y','g']; // red, blue, yellow, green
+const NAMES  = {r:'Red', b:'Blue', y:'Yellow', g:'Green'};
+const CLZ    = {r:'c-red', b:'c-blue', y:'c-yellow', g:'c-green'};
+const PIECES = { 'K':'k','R':'r','B':'b','N':'n','P':'p' };
+const VAL    = { P:1, N:3, B:5, R:5, K:3 }; // chess.com chaturaji scoring
+const DIR = { r:{x:0,y:-1}, y:{x:0,y:1}, b:{x:1,y:0}, g:{x:-1,y:0} };
+const BOARD_N=8;
+
+function inBounds(x,y){ return x>=0 && x<BOARD_N && y>=0 && y<BOARD_N; }
+function cloneBoard(S){ return S.map(col=>col.map(c=>c?{...c}:null)); }
+
+/* ==== State ==== */
+let board=[];
+let turnIdx=0;
+let selected=null, hintList=[], lastMove=null;
+let eliminated=new Set();     // king captured
+let inactive=new Set();       // alias to eliminated (pieces become ghosts)
+let winner=null;
+let score = {r:0,b:0,y:0,g:0};
+
+/* Clocks */
+const CONFIG={startMinutes:10, incrementSeconds:0};
+let timeMs={r:CONFIG.startMinutes*60000,b:CONFIG.startMinutes*60000,y:CONFIG.startMinutes*60000,g:CONFIG.startMinutes*60000};
+let timer=null,lastTick=null,startedOnce=false;
+const clockEl={ r:qs('#redClock'), b:qs('#blueClock'), y:qs('#yellowClock'), g:qs('#greenClock') };
+function fmt(ms){ ms=Math.max(0,ms|0); const s=(ms/1000|0), m=(s/60|0); return String(m).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+function curSide(){ return COLORS[turnIdx]; }
+function nextAlive(i){ let k=(i+1)%COLORS.length; while(inactive.has(COLORS[k])) k=(k+1)%COLORS.length; return k; }
+function setStatus(msg,kind='info'){ const bar=qs('#statusBar'); bar.classList.remove('warn','error'); if(kind==='warn')bar.classList.add('warn'); if(kind==='error')bar.classList.add('error'); bar.textContent=msg; }
+
+function startClock(){
+  if(winner) return;
+  if(!startedOnce){
+    const mins=Math.max(1, +qs('#minutesInput').value||CONFIG.startMinutes);
+    const inc =Math.max(0, +qs('#incrementInput').value||0);
+    CONFIG.startMinutes=mins; CONFIG.incrementSeconds=inc;
+    timeMs={r:mins*60000,b:mins*60000,y:mins*60000,g:mins*60000};
+    startedOnce=true; updateClocks();
+  }
+  if(timer) return;
+  lastTick=performance.now();
+  timer=setInterval(()=>{
+    const now=performance.now(), dt=now-lastTick; lastTick=now;
+    const c=curSide(); timeMs[c]-=dt; if(timeMs[c]<=0){ timeMs[c]=0; declareTimeFlag(c); }
+    updateClocks();
+  },250);
+  setStatus('Clock running.');
+}
+function pauseClock(){ if(timer){ clearInterval(timer); timer=null; setStatus('Clock paused.'); } }
+function resetClock(){
+  pauseClock();
+  const mins=Math.max(1, +qs('#minutesInput').value||CONFIG.startMinutes);
+  const inc =Math.max(0, +qs('#incrementInput').value||0);
+  CONFIG.startMinutes=mins; CONFIG.incrementSeconds=inc;
+  timeMs={r:mins*60000,b:mins*60000,y:mins*60000,g:mins*60000};
+  startedOnce=false; winner=null; updateClocks(); setStatus('Clocks reset.');
+}
+function addInc(c){ if(CONFIG.incrementSeconds>0) timeMs[c]+=CONFIG.incrementSeconds*1000; }
+function declareTimeFlag(flagColor){
+  // simple approach: stop and announce; (optionally you can continue without that side)
+  inactive.add(flagColor);
+  if(activeCount()===1){ winner = aliveColors()[0]; }
+  pauseClock();
+  setStatus(winner? `${NAMES[winner]} wins on time!` : `${NAMES[flagColor]} flagged (inactive).`, 'warn');
+  renderAll();
+}
+function updateClocks(){ for(const c of COLORS) clockEl[c].textContent=fmt(timeMs[c]); updateTurnUI(); }
+
+function activeCount(){ return COLORS.filter(c=>!inactive.has(c)).length; }
+function aliveColors(){ return COLORS.filter(c=>!inactive.has(c)); }
+
+// World -> Local (how to draw a world cell on a given board)
+function toLocal(side, x, y){
+  switch(side){
+    case 'r': return {u:x,     v:y    };
+    case 'y': return {u:7-x,   v:7-y  };
+    case 'g': return {u:7-y,   v:x    };
+    case 'b': return {u:y,     v:7-x  };
+  }
+}
+
+// Local -> World (how a click on a board maps back to the world)
+function toWorld(side, u, v){
+  switch(side){
+    case 'r': return {x:u,     y:v    };
+    case 'y': return {x:7-u,   y:7-v  };
+    case 'g': return {x:v,     y:7-u  };
+    case 'b': return {x:7-v,   y:u    };
+  }
+}
+
+// convenience
+function idx(u,v){ return v*8 + u; }
+
+/* ==== Boards ==== */
+const boards={ r:qs('#boardRed'), b:qs('#boardBlue'), y:qs('#boardYellow'), g:qs('#boardGreen') };
+function buildBoards(){
+  for(const [side, el] of Object.entries(boards)){
+    el.innerHTML = '';
+    for(let v=0; v<8; v++){
+      for(let u=0; u<8; u++){
+        const sq = document.createElement('div');
+        sq.className = 'square ' + (((u+v)&1) ? 'dark' : 'light');
+        sq.dataset.u = u; sq.dataset.v = v;   // LOCAL coords
+        sq.addEventListener('pointerdown', (e)=>onDownLocal(e, side), {passive:true});
+        sq.addEventListener('pointerup',   (e)=>onUpLocal(e, side),   {passive:true});
+        el.appendChild(sq);
+      }
+    }
+  }
+}
+
+function onDownLocal(e, side){
+  if(!canAct(side)) return;
+  const u = +e.currentTarget.dataset.u;
+  const v = +e.currentTarget.dataset.v;
+  const {x,y} = toWorld(side, u, v);     // convert to world
+  const p = board[x][y];
+  if(!p || p.color!==side) return;
+  selected = { x, y, by: side };         // store WORLD coords
+  clearHints(); showHints(selected); markSelected(selected);
+}
+
+function onUpLocal(e, side){
+  if(!canAct(side) || !selected || selected.by!==side) return;
+  const u = +e.currentTarget.dataset.u;
+  const v = +e.currentTarget.dataset.v;
+  const {x,y} = toWorld(side, u, v);     // convert to world
+
+  if(selected.x===x && selected.y===y) return;
+  const ok = doMove(selected, {x,y});
+  if(!ok) return;
+
+  addInc(side);
+  clearHints(); selected=null;
+  turnIdx = nextAlive(turnIdx);
+  renderAll();
+  if(!timer && startedOnce) startClock();
+  setStatus(`${NAMES[curSide()]} to move.`);
+}
+function markSelected(sel){ // sel has world coords
+  for(const [side, el] of Object.entries(boards)){
+    const {u,v} = toLocal(side, sel.x, sel.y);
+    el.querySelectorAll('.square')[idx(u,v)].classList.add('selected');
+  }
+}
+
+function showHints(sel){
+  const moves = genMoves(sel.x, sel.y);
+  hintList = moves.map(m => ({x:m.x, y:m.y}));  // store world squares
+  for(const [side, el] of Object.entries(boards)){
+    const S = el.querySelectorAll('.square');
+    for(const m of hintList){
+      const {u,v} = toLocal(side, m.x, m.y);
+      S[idx(u,v)].classList.add('hint');
+    }
+  }
+}
+
+function clearHints(){
+  for(const [side, el] of Object.entries(boards)){
+    el.querySelectorAll('.hint').forEach(s=>s.classList.remove('hint'));
+    el.querySelectorAll('.selected').forEach(s=>s.classList.remove('selected'));
+  }
+  hintList = [];
+}
+
+function renderAll(){
+  // clear
+  for(const el of Object.values(boards)){
+    const S = el.querySelectorAll('.square');
+    S.forEach(s=>{
+      s.classList.remove('hint','selected','lastmove','incheck','ghostCaptureAnim');
+      const p = s.querySelector('.piece'); if(p) p.remove();
+    });
+  }
+
+  // draw: for every world (x,y), compute each board's local (u,v) and place there
+  for(let y=0;y<8;y++){
+    for(let x=0;x<8;x++){
+      const p = board[x][y]; if(!p) continue;
+      const pieceEl = document.createElement('div');
+      pieceEl.className = `piece ${CLZ[p.color]} ${PIECES[p.type]} ${inactive.has(p.color)?'ghost':''}`;
+      for(const [side, el] of Object.entries(boards)){
+        const {u,v} = toLocal(side, x, y);
+        const S = el.querySelectorAll('.square');
+        S[idx(u,v)].appendChild(pieceEl.cloneNode(true));
+      }
+    }
+  }
+
+  // last move highlight: project both squares onto each board
+  if(lastMove){
+    for(const [side, el] of Object.entries(boards)){
+      const S = el.querySelectorAll('.square');
+      const a = toLocal(side, lastMove.from.x, lastMove.from.y);
+      const b = toLocal(side, lastMove.to.x,   lastMove.to.y);
+      S[idx(a.u,a.v)].classList.add('lastmove');
+      S[idx(b.u,b.v)].classList.add('lastmove');
+    }
+  }
+
+  // check highlights (project king squares)
+  highlightChecks();
+
+  updateTurnUI();
+  updateScoresUI();
+}
+
+function updateTurnUI(){
+  const cur=curSide();
+  qs('#turnSide').textContent=NAMES[cur];
+  for(const [c,el] of Object.entries(boards)){
+    el.classList.toggle('active', !winner && c===cur && !inactive.has(c));
+    el.classList.toggle('inactive', !!winner || c!==cur || inactive.has(c));
+  }
+  // mark score tags if out
+  for(const c of COLORS){
+    qs('#score-'+c).classList.toggle('out', inactive.has(c));
+  }
+}
+function highlightChecks(){
+  const kings = getKingMap();
+  for(const [c, kpos] of Object.entries(kings)){
+    if(!kpos) continue;
+    const attackers = countAttackers(kpos.x, kpos.y);
+    if(attackers>0){
+      for(const [side, el] of Object.entries(boards)){
+        const {u,v} = toLocal(side, kpos.x, kpos.y);
+        el.querySelectorAll('.square')[idx(u,v)].classList.add('incheck');
+      }
+    }
+  }
+}
+
+
+/* ==== Input ==== */
+function canAct(side){ return !winner && side===curSide() && !inactive.has(side); }
+function onDown(e,side){
+  if(!canAct(side)) return;
+  const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y;
+  const p=board[x][y]; if(!p || p.color!==side) return;
+  selected={x,y,by:side}; clearHints(); showHints(selected); markSelected(selected);
+}
+function onUp(e,side){
+  if(!canAct(side) || !selected || selected.by!==side) return;
+  const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y;
+  if(selected.x===x && selected.y===y) return;
+  const ok=doMove(selected,{x,y});
+  if(!ok) return;
+  addInc(side);
+  clearHints(); selected=null;
+
+  // next alive
+  turnIdx = nextAlive(turnIdx);
+  renderAll();
+  if(!timer && startedOnce) startClock();
+  setStatus(`${NAMES[curSide()]} to move.`);
+}
+
+/* ==== Move generation (no "illegal check" filtering) ==== */
+function genMoves(x,y,S=board){
+  const p=S[x][y]; if(!p) return [];
+  if(inactive.has(p.color)) return [];
+  const c=p.color, out=[];
+  if(p.type==='P'){
+    const d=DIR[c];
+    const nx=x+d.x, ny=y+d.y;
+    if(inBounds(nx,ny) && !S[nx][ny]) out.push({x:nx,y:ny});
+    const diag = (d.x===0) ? [[1,d.y],[-1,d.y]] : [[d.x,1],[d.x,-1]];
+    for(const [dx,dy] of diag){
+      const cx=x+dx, cy=y+dy; if(!inBounds(cx,cy)) continue;
+      const t=S[cx][cy]; if(t && t.color!==c) out.push({x:cx,y:cy});
+    }
+  }else if(p.type==='N'){
+    const d=[[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];
+    for(const [dx,dy] of d){ const nx=x+dx, ny=y+dy; if(!inBounds(nx,ny)) continue; const t=S[nx][ny]; if(!t || t.color!==c) out.push({x:nx,y:ny}); }
+  }else if(p.type==='B' || p.type==='R'){
+    const dirs=[]; if(p.type!=='B') dirs.push([1,0],[-1,0],[0,1],[0,-1]); if(p.type!=='R') dirs.push([1,1],[-1,1],[1,-1],[-1,-1]);
+    for(const [dx,dy] of dirs){
+      let nx=x+dx, ny=y+dy;
+      while(inBounds(nx,ny)){
+        const t=S[nx][ny];
+        if(!t) out.push({x:nx,y:ny});
+        else{ if(t.color!==c) out.push({x:nx,y:ny}); break; }
+        nx+=dx; ny+=dy;
+      }
+    }
+  }else if(p.type==='K'){
+    for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+      if(dx===0&&dy===0) continue;
+      const nx=x+dx, ny=y+dy; if(!inBounds(nx,ny)) continue;
+      const t=S[nx][ny]; if(!t || t.color!==c) out.push({x:nx,y:ny});
+    }
+  }
+  return out;
+}
+
+/* ==== Attacks & check counting (for highlight & scoring bonuses) ==== */
+function isAttackedByColor(x,y,color,S=board){
+  for(let yy=0;yy<BOARD_N;yy++) for(let xx=0;xx<BOARD_N;xx++){
+    const p=S[xx][yy]; if(!p || p.color!==color || inactive.has(color)) continue;
+    const moves=genMoves(xx,yy,S);
+    if(moves.some(m=>m.x===x && m.y===y)) return true;
+  }
+  return false;
+}
+function countAttackers(x,y,S=board){
+  let count=0;
+  for(const c of COLORS){ if(inactive.has(c)) continue; if(isAttackedByColor(x,y,c,S)) count++; }
+  return count;
+}
+function getKingMap(S=board){
+  const map={r:null,b:null,y:null,g:null};
+  for(let yy=0;yy<BOARD_N;yy++) for(let xx=0;xx<BOARD_N;xx++){
+    const p=S[xx][yy]; if(p && p.type==='K') map[p.color]={x:xx,y:yy};
+  }
+  return map;
+}
+
+/* ==== Move execution + scoring ==== */
+function doMove(from,to){
+  const legal=genMoves(from.x,from.y);
+  const mv=legal.find(m=>m.x===to.x && m.y===to.y);
+  if(!mv) return false;
+
+  const mover = board[from.x][from.y];
+  const target= board[to.x][to.y];
+
+  // capture scoring (only if target active)
+  if(target){
+    const activeCapture = !inactive.has(target.color);
+    board[to.x][to.y]=mover; board[from.x][from.y]=null; mover.moved=true;
+
+    // if king captured -> eliminate that side
+    if(target.type==='K'){
+      inactive.add(target.color);
+      if(activeCapture) score[mover.color] += VAL['K'];
+      // ghost all remaining pieces of that color (they stay on board)
+      // (no additional action needed; render adds .ghost for inactive colors)
+      if(activeCount()===1){ winner = aliveColors()[0]; pauseClock(); setStatus(`${NAMES[winner]} wins!`,'warn'); }
+    }else{
+      if(activeCapture) score[mover.color] += VAL[target.type];
+      // add tiny ghost flash on captured square
+      flashGhost(to.x,to.y);
+    }
+  }else{
+    board[to.x][to.y]=mover; board[from.x][from.y]=null; mover.moved=true;
+  }
+
+  // promotion -> rook at far edge
+  if(mover.type==='P' && shouldPromote(mover.color,to.x,to.y)){
+    board[to.x][to.y] = {type:'R', color:mover.color, moved:true};
+  }
+
+  lastMove={from:{x:from.x,y:from.y}, to:{x:to.x,y:to.y}};
+
+  // check bonuses: count how many enemy kings are now in check by mover's color
+  const kings=getKingMap(board);
+  let checked=0;
+  for(const c of COLORS){
+    if(c===mover.color || inactive.has(c) || !kings[c]) continue;
+    if(isAttackedByColor(kings[c].x, kings[c].y, mover.color, board)) checked++;
+  }
+  if(checked===2) score[mover.color]+=1;
+  else if(checked>=3) score[mover.color]+=5;
+
+  updateScoresUI();
+  return true;
+}
+
+function shouldPromote(color,x,y){
+  if(color==='r' && y===0) return true;
+  if(color==='y' && y===BOARD_N-1) return true;
+  if(color==='b' && x===BOARD_N-1) return true;
+  if(color==='g' && x===0) return true;
+  return false;
+}
+
+function flashGhost(x,y){
+  for(const el of Object.values(boards)){
+    const sq=el.querySelectorAll('.square')[y*BOARD_N+x];
+    sq.classList.add('ghostCaptureAnim');
+    setTimeout(()=>sq.classList.remove('ghostCaptureAnim'), 400);
+  }
+}
+
+/* ==== Setup ==== */
+function newGame(){
+  board=Array.from({length:BOARD_N},()=>Array(BOARD_N).fill(null));
+  eliminated.clear(); inactive.clear(); winner=null; selected=null; hintList=[]; lastMove=null; turnIdx=0;
+  score={r:0,b:0,y:0,g:0};
+
+  // RED
+  for(let x=0;x<4;x++) board[x][6]={type:'P',color:'r',moved:false};
+  board[0][7]={type:'R',color:'r',moved:false};
+  board[1][7]={type:'N',color:'r',moved:false};
+  board[2][7]={type:'B',color:'r',moved:false};
+  board[3][7]={type:'K',color:'r',moved:false};
+  
+  // YELLOW
+  for(let x=4;x<8;x++) board[x][1]={type:'P',color:'y',moved:false};
+  board[4][0]={type:'K',color:'y',moved:false};
+  board[5][0]={type:'B',color:'y',moved:false};
+  board[6][0]={type:'N',color:'y',moved:false};
+  board[7][0]={type:'R',color:'y',moved:false};
+  
+  // BLUE
+  for(let y=4;y<8;y++) board[6][y]={type:'P',color:'g',moved:false};
+  board[7][7]={type:'R',color:'g',moved:false};
+  board[7][6]={type:'N',color:'g',moved:false};
+  board[7][5]={type:'B',color:'g',moved:false};
+  board[7][4]={type:'K',color:'g',moved:false};
+  
+ 
+  // GREEN
+  for(let y=0;y<4;y++) board[1][y]={type:'P',color:'b',moved:false};
+  board[0][0]={type:'R',color:'b',moved:false};
+  board[0][1]={type:'N',color:'b',moved:false};
+  board[0][2]={type:'B',color:'b',moved:false};
+  board[0][3]={type:'K',color:'b',moved:false};
+
+  // clocks to UI values
+  const mins=Math.max(1, +qs('#minutesInput').value||CONFIG.startMinutes);
+  const inc =Math.max(0, +qs('#incrementInput').value||0);
+  CONFIG.startMinutes=mins; CONFIG.incrementSeconds=inc;
+  timeMs={r:mins*60000,b:mins*60000,y:mins*60000,g:mins*60000};
+  startedOnce=false;
+
+  renderAll();
+  setStatus('New game. Red to move.');
+}
+
+/* ==== UI bits ==== */
+function updateScoresUI(){
+  for(const c of COLORS){ qs('#score-'+c+' span').textContent = String(score[c]); }
+}
+function qs(sel){ return document.querySelector(sel); }
+function ce(tag,cls){ const el=document.createElement(tag); if(cls) el.className=cls; return el; }
+
+/* sizing controls */
+(function(){
+  const root=document.documentElement;
+  const s1=qs('#boardSizeSlider'), n1=qs('#boardSizeNumber');
+  const s2=qs('#pieceScaleSlider'), n2=qs('#pieceScaleNumber');
+  const setBoardSize=(px)=> root.style.setProperty('--board-size', px+'px');
+  const setPieceScale=(k)=> root.style.setProperty('--piece-scale', String(k));
+  const sync=(from,to,cb)=> from.addEventListener('input', ()=>{ to.value=from.value; cb(parseFloat(from.value)); });
+  sync(s1,n1,setBoardSize); sync(n1,s1,setBoardSize); sync(s2,n2,setPieceScale); sync(n2,s2,setPieceScale);
+  setBoardSize(parseFloat(s1.value)); setPieceScale(parseFloat(s2.value));
+})();
+
+/* wire buttons */
+qs('#startBtn').onclick = ()=> startClock();
+qs('#pauseBtn').onclick = ()=> pauseClock();
+qs('#resetBtn').onclick = ()=>{ resetClock(); newGame(); };
+
+/* go */
+buildBoards();
+newGame();
+updateClocks();
+</script>
+</body>
+</html>

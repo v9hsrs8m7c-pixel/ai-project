@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Farm Clicker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #90EE90;
+            padding: 20px;
+        }
+        #field {
+            width: 120px;
+            height: 120px;
+            cursor: pointer;
+            background-color: #654321;
+            border: 5px solid #453021;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            user-select: none;
+        }
+        #field:active {
+            transform: scale(0.95);
+        }
+        .upgrade {
+            background-color: #8B4513;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .upgrade:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #stats {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px auto;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Farm Clicker</h1>
+    <div id="stats">
+        <h2>Money: $<span id="money">0</span></h2>
+        <h3>Crops per second: <span id="cps">0</span></h3>
+    </div>
+    <div id="field">🌱</div>
+    <div id="upgrades">
+        <button class="upgrade" onclick="buyWorker()">
+            Hire Worker (Cost: $<span id="workerCost">10</span>)
+        </button>
+        <button class="upgrade" onclick="buyTractor()">
+            Buy Tractor (Cost: $<span id="tractorCost">50</span>)
+        </button>
+    </div>
+
+    <script>
+        let game = {
+            money: 0,
+            workers: 0,
+            tractors: 0,
+            workerCost: 10,
+            tractorCost: 50
+        };
+
+        // Load saved game
+        const savedGame = localStorage.getItem('farmGame');
+        if (savedGame) {
+            game = JSON.parse(savedGame);
+            updateDisplay();
+        }
+
+        function harvestCrop() {
+            game.money++;
+            updateDisplay();
+        }
+
+        function buyWorker() {
+            if (game.money >= game.workerCost) {
+                game.money -= game.workerCost;
+                game.workers++;
+                game.workerCost = Math.floor(game.workerCost * 1.5);
+                updateDisplay();
+            }
+        }
+
+        function buyTractor() {
+            if (game.money >= game.tractorCost) {
+                game.money -= game.tractorCost;
+                game.tractors++;
+                game.tractorCost = Math.floor(game.tractorCost * 1.8);
+                updateDisplay();
+            }
+        }
+
+        function updateDisplay() {
+            document.getElementById('money').textContent = Math.floor(game.money);
+            document.getElementById('cps').textContent = (game.workers + (game.tractors * 5));
+            document.getElementById('workerCost').textContent = game.workerCost;
+            document.getElementById('tractorCost').textContent = game.tractorCost;
+            
+            // Save game
+            localStorage.setItem('farmGame', JSON.stringify(game));
+        }
+
+        // Auto harvest loop
+        setInterval(() => {
+            game.money += game.workers; // Each worker produces 1 money per second
+            game.money += (game.tractors * 5); // Each tractor produces 5 money per second
+            updateDisplay();
+        }, 1000);
+
+        // Add click event listener to field
+        document.getElementById('field').addEventListener('click', harvestCrop);
+    </script>
+</body>
+</html>

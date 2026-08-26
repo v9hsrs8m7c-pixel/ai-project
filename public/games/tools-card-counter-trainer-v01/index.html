@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+
+  <!-- Fullscreen / PWA-like behavior -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#000000" />
+
+  <title>Blackjack Card Counter</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent; /* Removes tap glow */
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;            /* 🔒 No scrolling */
+      position: fixed;             /* Prevent bounce */
+      top: 0; left: 0;             /* Fullscreen lock */
+      background: #02121f;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .app {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;             /* extra safety */
+      background: #0b1a2a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    }
+
+    h1 {
+      color: #fff;
+      font-size: 20px;
+      margin: 8px 0 2px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    select, button {
+      width: 100%;
+      max-width: 320px;
+      padding: 12px;
+      border-radius: 999px;
+      border: none;
+      font-size: 16px;
+      margin-top: 6px;
+    }
+
+    select {
+      background: #0b1a2a;
+      color: #e5e7eb;
+      border: 1px solid #334155;
+    }
+
+    button {
+      background: #2563eb;
+      color: white;
+    }
+
+    button.btn-secondary {
+      background: #1e293b;
+      border: 1px solid #475569;
+    }
+
+    button:disabled {
+      background: #475569;
+    }
+
+    /* Card layout area */
+    .card-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .card-display {
+      width: 180px;
+      height: 260px;
+      border-radius: 16px;
+      background: #ffffff;
+      border: 2px solid #e2e8f0;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+      cursor: pointer;
+      perspective: 800px;
+      position: relative;
+    }
+
+    .card-inner {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      transform-style: preserve-3d;
+      transition: transform 0.25s ease-out;
+    }
+
+    .card-display.flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-face, .card-value {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+    }
+
+    .card-face.red { color: #dc2626; }
+    .card-face.black { color: #111827; }
+
+    .card-corner {
+      position: absolute;
+      font-size: 20px;
+      line-height: 1.1;
+      text-align: center;
+    }
+
+    .card-corner.top-left { top: 6px; left: 8px; }
+    .card-corner.bottom-right {
+      bottom: 6px; right: 8px;
+      transform: rotate(180deg);
+    }
+
+    .card-suit-large {
+      font-size: 80px;
+    }
+
+    .card-value {
+      background: #0f172a;
+      color: #fff;
+      transform: rotateY(180deg);
+      flex-direction: column;
+    }
+
+    .card-value-main {
+      font-size: 56px;
+      font-weight: bold;
+    }
+
+    .info-text {
+      font-size: 13px;
+      color: #9ca3af;
+      text-align: center;
+      margin-top: 8px;
+    }
+
+    .feedback {
+      font-size: 14px;
+      min-height: 20px;
+      margin-top: 10px;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <h1>Card Counter Trainer</h1>
+    <div class="subtitle">Hi-Lo: 2–6 = +1, 7–9 = 0, 10/A/J/Q/K = −1</div>
+
+    <select id="decks">
+      <option value="1">1 deck</option>
+      <option value="2">2 decks</option>
+      <option value="4" selected>4 decks</option>
+      <option value="6">6 decks</option>
+      <option value="8">8 decks</option>
+    </select>
+
+    <button id="startShoeBtn">Start / Reset Shoe</button>
+
+    <div id="shoeInfo" class="info-text">Shoe not started yet.</div>
+
+    <!-- CARD AREA -->
+    <div class="card-container">
+      <div id="cardDisplay" class="card-display">
+        <div class="card-inner">
+          <div class="card-face card-empty">
+            <span style="font-size:36px; opacity:0.25;">?</span>
+          </div>
+          <div class="card-value">
+            <div style="opacity:0.6; font-size:14px;">Hi-Lo</div>
+            <div class="card-value-main">?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button id="dealBtn" disabled>Deal Next Card</button>
+    <button id="showCountBtn" class="btn-secondary" disabled>Show Running Count</button>
+
+    <div id="lastCardText" class="info-text">
+      Tap “Deal Next Card” to begin.
+    </div>
+
+    <div id="feedback" class="feedback"></div>
+
+  </div>
+
+<script>
+  const suits = ["♠","♥","♦","♣"];
+  const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+
+  function hiLoValue(rank){
+    if(["2","3","4","5","6"].includes(rank)) return 1;
+    if(["7","8","9"].includes(rank)) return 0;
+    return -1;
+  }
+
+  function createDeck(n){
+    const deck=[];
+    for(let d=0; d<n; d++)
+      for(const s of suits)
+        for(const r of ranks)
+          deck.push({rank:r, suit:s, hiLo:hiLoValue(r)});
+    return deck;
+  }
+
+  function shuffle(a){
+    for(let i=a.length-1; i>0; i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  let deck=[], current=null, running=0, dealt=0, flipped=false;
+
+  const deckSel=document.getElementById("decks");
+  const startBtn=document.getElementById("startShoeBtn");
+  const dealBtn=document.getElementById("dealBtn");
+  const showBtn=document.getElementById("showCountBtn");
+  const cardDisplay=document.getElementById("cardDisplay");
+  const lastText=document.getElementById("lastCardText");
+  const feedback=document.getElementById("feedback");
+  const shoeInfo=document.getElementById("shoeInfo");
+
+  function resetUI(){
+    running = 0;
+    dealt = 0;
+    current = null;
+    flipped=false;
+    cardDisplay.classList.remove("flipped");
+    cardDisplay.querySelector(".card-inner").innerHTML = `
+      <div class="card-face card-empty">
+        <span style="font-size:36px; opacity:0.25;">?</span>
+      </div>
+      <div class="card-value">
+        <div style="opacity:0.6; font-size:14px;">Hi-Lo</div>
+        <div class="card-value-main">?</div>
+      </div>
+    `;
+    lastText.textContent = "Tap “Deal Next Card” to begin.";
+    feedback.textContent = "";
+  }
+
+  function startShoe(){
+    deck = shuffle(createDeck(parseInt(deckSel.value)));
+    resetUI();
+    shoeInfo.textContent = `Shoe ready: ${deck.length} cards`;
+    dealBtn.disabled=false;
+    showBtn.disabled=false;
+  }
+
+  function updateCard(){
+    const inner = cardDisplay.querySelector(".card-inner");
+    const isRed = (current.suit==="♥" || current.suit==="♦");
+    const colorClass = isRed ? "red":"black";
+    const val = current.hiLo > 0 ? "+"+current.hiLo : current.hiLo;
+
+    inner.innerHTML = `
+      <div class="card-face ${colorClass}">
+        <div class="card-corner top-left">
+          <div>${current.rank}</div>
+          <div>${current.suit}</div>
+        </div>
+        <div class="card-corner bottom-right">
+          <div>${current.rank}</div>
+          <div>${current.suit}</div>
+        </div>
+        <div class="card-suit-large">${current.suit}</div>
+      </div>
+
+      <div class="card-value">
+        <div style="opacity:0.6; font-size:14px;">Hi-Lo</div>
+        <div class="card-value-main">${val}</div>
+      </div>
+    `;
+  }
+
+  function dealCard(){
+    if(dealt >= deck.length){
+      feedback.textContent="Shoe finished!";
+      return;
+    }
+    current = deck[dealt++];
+    running += current.hiLo;
+
+    flipped = false;
+    cardDisplay.classList.remove("flipped");
+    updateCard();
+
+    lastText.textContent = `Cards dealt: ${dealt} — Keep the running count in your head.`;
+  }
+
+  function showCount(){
+    feedback.textContent = `Running count: ${running}`;
+  }
+
+  function toggleFlip(){
+    if(!current) return;
+    flipped = !flipped;
+    cardDisplay.classList.toggle("flipped", flipped);
+  }
+
+  startBtn.onclick = startShoe;
+  dealBtn.onclick = dealCard;
+  showBtn.onclick = showCount;
+  cardDisplay.onclick = toggleFlip;
+</script>
+
+</body>
+</html>

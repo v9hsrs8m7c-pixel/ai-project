@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Indenter & Dedenter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background-color: #f5f5f5;
+    }
+    textarea {
+      width: 100%;
+      height: 200px;
+      font-family: monospace;
+      font-size: 14px;
+      margin-top: 10px;
+      margin-bottom: 15px;
+    }
+    select, button {
+      padding: 6px 10px;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Code Indenter & Dedenter</h2>
+  <label for="indent">Indent amount:</label>
+  <select id="indent">
+    <option value="1">1 space</option>
+    <option value="2">2 spaces</option>
+    <option value="3">3 spaces</option>
+    <option value="4">4 spaces</option>
+    <option value="tab">1 tab</option>
+  </select>
+  <button onclick="addIndent()">Indent</button>
+  <button onclick="removeIndent()">Dedent</button>
+  
+  <h3>Input Code:</h3>
+  <textarea id="inputCode" placeholder="Paste your code here..."></textarea>
+
+  <h3>Output Code:</h3>
+  <textarea id="outputCode" readonly></textarea>
+
+  <script>
+    function getIndentString() {
+      const indentOption = document.getElementById('indent').value;
+      return indentOption === 'tab' ? '\t' : ' '.repeat(parseInt(indentOption));
+    }
+
+    function addIndent() {
+      const input = document.getElementById('inputCode').value;
+      const indent = getIndentString();
+      const lines = input.split('\n');
+      const indented = lines.map(line => indent + line);
+      document.getElementById('outputCode').value = indented.join('\n');
+    }
+
+    function removeIndent() {
+      const input = document.getElementById('inputCode').value;
+      const indent = getIndentString();
+      const lines = input.split('\n');
+      const dedented = lines.map(line => 
+        line.startsWith(indent)
+          ? line.slice(indent.length)
+          : line.replace(/^\s+/, '') // fallback: remove leading spaces if mixed
+      );
+      document.getElementById('outputCode').value = dedented.join('\n');
+    }
+  </script>
+</body>
+</html>

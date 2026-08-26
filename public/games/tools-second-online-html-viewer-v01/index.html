@@ -1,0 +1,300 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HTML Online Viewer — Pro</title>
+  <meta name="description" content="Fast HTML editor & formatter with instant live preview." />
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Layout fixes for resizable panels */
+    html, body { height: 100%; }
+    .panel { resize: horizontal; overflow: hidden; min-width: 260px; }
+    .cm-editor, .CodeMirror { height: calc(100vh - 180px); }
+    iframe { height: calc(100vh - 180px); }
+    .CodeMirror { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 14px; }
+  </style>
+  <!-- CodeMirror 5 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/css/css.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closetag.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldgutter.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/foldgutter.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/fold/xml-fold.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/scroll/annotatescrollbar.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/search/searchcursor.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/search/jump-to-line.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/selection/active-line.min.js"></script>  <!-- Prettier (standalone) for HTML formatting -->  <script src="https://unpkg.com/prettier@2.8.8/standalone.js"></script>  <script src="https://unpkg.com/prettier@2.8.8/parser-html.js"></script>  <!-- DOMPurify for safe preview mode -->  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script></head>
+<body class="bg-slate-950 text-slate-100">
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/70 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-[1400px] mx-auto px-4 py-3 flex items-center gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-indigo-400"><path d="M4 4h16v2H4zM4 10h16v2H4zM4 16h10v2H4z"/></svg>
+      <h1 class="text-lg font-semibold">HTML Online Viewer — <span class="text-indigo-400">Pro</span></h1>
+      <span id="status" class="ml-auto text-xs text-slate-400">Saved</span>
+    </div>
+  </header>  <!-- Toolbar -->  <div class="max-w-[1400px] mx-auto px-4 py-3 grid grid-cols-1 md:grid-cols-12 gap-3">
+    <div class="col-span-12 flex flex-wrap items-center gap-2">
+      <button id="btn-format" class="px-3 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-500 transition">Format</button>
+      <button id="btn-beautify" class="px-3 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 transition">Beautify & Indent</button>
+      <button id="btn-minify" class="px-3 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 transition" title="Removes extra whitespace">Minify</button>
+      <div class="h-6 w-px bg-slate-800 mx-1"></div>
+      <label class="inline-flex items-center gap-2 text-sm"><input id="chk-wrap" type="checkbox" class="accent-indigo-500"> Wrap as full HTML document</label>
+      <label class="inline-flex items-center gap-2 text-sm"><input id="chk-safepreview" type="checkbox" checked class="accent-indigo-500"> Safe Preview (no scripts)</label>
+      <label class="inline-flex items-center gap-2 text-sm"><input id="chk-autoupdate" type="checkbox" checked class="accent-indigo-500"> Auto‑update preview</label>
+      <div class="h-6 w-px bg-slate-800 mx-1"></div>
+      <button id="btn-run" class="px-3 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 transition">Update Preview</button>
+      <div class="ml-auto flex items-center gap-2">
+        <input id="file-input" type="file" accept=".html,.htm,.txt" class="hidden" />
+        <button id="btn-open" class="px-3 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 transition">Open…</button>
+        <button id="btn-download" class="px-3 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 transition">Download</button>
+        <button id="btn-reset" class="px-3 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 transition">Reset</button>
+      </div>
+    </div>
+  </div>  <!-- Main Panels -->  <main class="max-w-[1400px] mx-auto px-4 pb-6">
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+      <!-- Editor Panel -->
+      <section class="panel col-span-12 md:col-span-6 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+        <div class="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800">
+          <div class="text-sm text-slate-300">Editor</div>
+          <div class="text-xs text-slate-500">CodeMirror • HTML Mixed</div>
+        </div>
+        <textarea id="editor" name="editor"></textarea>
+        <div class="px-3 py-2 text-xs text-slate-400 bg-slate-900 border-t border-slate-800 flex justify-between">
+          <span>⌘/Ctrl + S to save • ⌘/Ctrl + Enter to preview</span>
+          <span>Words: <span id="word-count">0</span> • Lines: <span id="line-count">0</span></span>
+        </div>
+      </section><!-- Preview Panel -->
+  <section class="col-span-12 md:col-span-6 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+    <div class="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800">
+      <div class="text-sm text-slate-300">Live Preview</div>
+      <div class="text-xs text-slate-500" id="preview-mode-label">Safe</div>
+    </div>
+    <iframe id="preview" class="w-full bg-white" sandbox="allow-forms allow-pointer-lock allow-popups allow-modals"></iframe>
+    <div class="px-3 py-2 text-xs text-slate-400 bg-slate-900 border-t border-slate-800 flex justify-between">
+      <span>Sandboxed preview to protect your browser.</span>
+      <button id="btn-popout" class="underline">Open in new tab</button>
+    </div>
+  </section>
+</div>
+
+  </main>  <!-- Footer -->  <footer class="max-w-[1400px] mx-auto px-4 pb-6 text-xs text-slate-500">
+    <p>Tip: Paste a full HTML file or just a fragment. Use <em>Wrap as full HTML document</em> if your input is only a snippet.</p>
+  </footer>  <template id="doc-shell">
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Preview</title>
+      <style>body{margin:16px;font-family:system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";}</style>
+    </head>
+    <body><!--CONTENT--></body>
+    </html>
+  </template>  <script>
+    // Utilities
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+    const defaultHTML = `<!-- Welcome to HTML Online Viewer — Pro -->\n<!-- Type HTML here. Try scripts in Full Preview mode. -->\n<div class="card">\n  <h1>Hello, world! 👋</h1>\n  <p>This is a <strong>live</strong> preview. Edit the code on the left.</p>\n  <button onclick="alert('It works (in Full Preview).')">Click me</button>\n</div>\n<style>\n  .card{\n    padding:16px;\n    border:1px solid #ddd;\n    border-radius:12px;\n    box-shadow:0 6px 18px rgba(0,0,0,.08);\n  }\n</style>`;// Editor
+const cm = CodeMirror.fromTextArea($('#editor'), {
+  mode: 'text/html',
+  theme: 'material-darker',
+  lineNumbers: true,
+  styleActiveLine: true,
+  autoCloseTags: true,
+  autoCloseBrackets: true,
+  lineWrapping: true,
+  foldGutter: true,
+  gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+  tabSize: 2,
+  indentUnit: 2,
+  extraKeys: {
+    'Ctrl-S': saveToLocal,
+    'Cmd-S': saveToLocal,
+    'Ctrl-Enter': runPreview,
+    'Cmd-Enter': runPreview,
+    'Tab': function(cm){
+      if (cm.somethingSelected()) cm.indentSelection('add');
+      else cm.replaceSelection('  ', 'end');
+    }
+  }
+});
+
+// State
+const STORAGE_KEY = 'hovp-content-v1';
+const PREF_KEY = 'hovp-prefs-v1';
+
+const prefs = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
+$('#chk-wrap').checked = !!prefs.wrap;
+$('#chk-safepreview').checked = prefs.safe !== false; // default true
+$('#chk-autoupdate').checked = prefs.autoupdate !== false; // default true
+
+const initial = localStorage.getItem(STORAGE_KEY) || defaultHTML;
+cm.setValue(initial);
+
+const status = $('#status');
+function setStatus(text){ status.textContent = text; }
+
+// Word/line counters
+function updateCounts(){
+  const content = cm.getValue();
+  const words = (content.match(/\S+/g) || []).length;
+  $('#word-count').textContent = words;
+  $('#line-count').textContent = cm.lineCount();
+}
+cm.on('change', () => { updateCounts(); maybeAutoUpdate(); setStatus('Unsaved changes'); });
+updateCounts();
+
+// Formatting helpers with Prettier
+function formatHTML({minify=false}={}){
+  try{
+    const content = cm.getValue();
+    const formatted = prettier.format(content, {
+      parser: 'html',
+      plugins: prettierPlugins,
+      htmlWhitespaceSensitivity: 'ignore',
+      printWidth: 100,
+      tabWidth: 2,
+      useTabs: false,
+      bracketSameLine: false,
+      proseWrap: 'preserve'
+    });
+    cm.setValue(minify ? formatted.replace(/>\s+</g, '><').trim() : formatted);
+  } catch(err){
+    alert('Format error: ' + err.message);
+  }
+}
+
+// Beautify = formatting without aggressive whitespace collapse
+function beautify(){ formatHTML({minify:false}); }
+
+// Minify = formatting then collapse whitespace between tags
+function minify(){ formatHTML({minify:true}); }
+
+// Wrap fragment in full HTML shell
+function maybeWrap(html){
+  if (!$('#chk-wrap').checked) return html;
+  const shell = $('#doc-shell').innerHTML;
+  return shell.replace('<!--CONTENT-->', html);
+}
+
+// Safe/Full preview render
+function getPreviewHTML(){
+  let html = cm.getValue();
+  html = maybeWrap(html);
+  const safe = $('#chk-safepreview').checked;
+  $('#preview-mode-label').textContent = safe ? 'Safe' : 'Full';
+  if (safe) {
+    try {
+      // Remove script tags, event handlers, and dangerous URLs
+      const clean = DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+        FORBID_ATTR: ['onerror','onload','onclick','onmouseover','onfocus','onblur'],
+      });
+      return clean;
+    } catch(e){ return html; }
+  }
+  return html;
+}
+
+function applyIframeSandbox(){
+  const iframe = $('#preview');
+  const safe = $('#chk-safepreview').checked;
+  // Safe mode: no scripts allowed. Full mode: allow scripts but remain sandboxed.
+  iframe.setAttribute('sandbox', safe ? 'allow-forms allow-pointer-lock allow-popups allow-modals' : 'allow-scripts allow-forms allow-pointer-lock allow-popups allow-modals allow-same-origin');
+}
+
+function runPreview(){
+  applyIframeSandbox();
+  const html = getPreviewHTML();
+  const iframe = $('#preview');
+  iframe.srcdoc = html;
+  setStatus('Preview updated');
+}
+
+// Debounced auto-update
+let t;
+function maybeAutoUpdate(){
+  if (!$('#chk-autoupdate').checked) return;
+  clearTimeout(t);
+  t = setTimeout(runPreview, 300);
+}
+
+// File open
+$('#btn-open').addEventListener('click', () => $('#file-input').click());
+$('#file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  cm.setValue(text);
+  runPreview();
+  setStatus('Loaded "' + file.name + '"');
+});
+
+// Download
+$('#btn-download').addEventListener('click', () => {
+  const blob = new Blob([cm.getValue()], {type: 'text/html;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'document.html';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+});
+
+// Reset
+$('#btn-reset').addEventListener('click', () => {
+  if (!confirm('Reset editor to the default template?')) return;
+  cm.setValue(defaultHTML);
+  runPreview();
+  setStatus('Reset to default');
+});
+
+// Buttons
+$('#btn-format').addEventListener('click', () => formatHTML());
+$('#btn-beautify').addEventListener('click', () => beautify());
+$('#btn-minify').addEventListener('click', () => minify());
+$('#btn-run').addEventListener('click', runPreview);
+$('#chk-safepreview').addEventListener('change', () => { applyIframeSandbox(); runPreview(); });
+$('#chk-wrap').addEventListener('change', runPreview);
+
+// Save / persist
+function saveToLocal(){
+  localStorage.setItem(STORAGE_KEY, cm.getValue());
+  localStorage.setItem(PREF_KEY, JSON.stringify({
+    wrap: $('#chk-wrap').checked,
+    safe: $('#chk-safepreview').checked,
+    autoupdate: $('#chk-autoupdate').checked,
+  }));
+  setStatus('Saved');
+  return false; // prevent default
+}
+
+window.addEventListener('beforeunload', saveToLocal);
+
+// Popout
+$('#btn-popout').addEventListener('click', () => {
+  const html = getPreviewHTML();
+  const blob = new Blob([html], {type: 'text/html'});
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+});
+
+// Initial render
+runPreview();
+
+  </script>
+</body>
+</html>

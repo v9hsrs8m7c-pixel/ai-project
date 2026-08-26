@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>2D Navier–Stokes Toroidal Vortex Air Cannon</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #050508;
+      color: #f0f0f0;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #topbar {
+      background: rgba(10,10,18,0.95);
+      padding: 8px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      z-index: 2;
+    }
+
+    #topbar label {
+      font-size: 12px;
+      opacity: 0.9;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #topbar input[type="range"] {
+      width: 90px;
+    }
+
+    #topbar select {
+      background: #14141f;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      color: #fff;
+      padding: 3px 6px;
+      font-size: 12px;
+    }
+
+    #topbar button {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, #36c1ff, #a855ff);
+      color: #050508;
+      box-shadow: 0 0 10px rgba(56,189,248,0.4);
+      flex-shrink: 0;
+    }
+
+    #topbar button:active {
+      transform: scale(0.97);
+    }
+
+    #sim-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #sim {
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      background: radial-gradient(circle at 10% 10%, #080818, #020208);
+    }
+
+    #info {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.6);
+      background: rgba(0,0,0,0.35);
+      padding: 6px 8px;
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+    }
+
+    @media (max-width: 600px) {
+      #topbar {
+        font-size: 11px;
+      }
+      #topbar input[type="range"] {
+        width: 70px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <button id="fireBtn">🔥 Fire Ring</button>
+    <button id="clearBtn" style="background:rgba(255,255,255,0.06);color:#f0f0f0;box-shadow:none;">Clear</button>
+
+    <label>
+      Visc
+      <input id="viscSlider" type="range" min="0" max="50" value="5" step="1" />
+    </label>
+    <label>
+      Diff
+      <input id="diffSlider" type="range" min="0" max="30" value="3" step="1" />
+    </label>
+    <label>
+      Ring R
+      <input id="ringRSlider" type="range" min="10" max="60" value="30" step="1" />
+    </label>
+    <label>
+      Strength
+      <input id="ringStrengthSlider" type="range" min="10" max="200" value="80" step="1" />
+    </label>
+    <label>
+      Display
+      <select id="displayMode">
+        <option value="density">Density</option>
+        <option value="vorticity">Vorticity</option>
+        <option value="velocity">Velocity</option>
+      </select>
+    </label>
+    <label>
+      Color
+      <select id="colorMode">
+        <option value="fire">Fire</option>
+        <option value="ice">Ice</option>
+        <option value="plasma">Plasma</option>
+        <option value="greyscale">Greyscale</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="sim-container">
+    <canvas id="sim"></canvas>
+    <div id="info">
+      Drag to stir the fluid · Fire ring → approximate toroidal vortex (2D cross-section)
+    </div>
+  </div>
+
+  <script>
+    // ===================== FLUID SOLVER (Navier–Stokes, 2D, Stable Fluids) ===================== //
+
+    class Fluid {
+      constructor(N, diffusion, viscosity, dt) {
+        this.N = N;
+        this.dt = dt;
+        this.diff = diffusion;
+        this.visc = viscosity;
+        const size = (N + 2) * (N + 2);
+
+        this.s = new Float32Array(size);        // density temp
+        this.density = new Float32Array(size);  // density
+
+        this.Vx = new Float32Array(size);       // velocity x
+        this.Vy = new Float32Array(size);       // velocity y
+
+        this.Vx0 = new Float32Array(size);      // temp x
+        this.Vy0 = new Float32Array(size);      // temp y
+      }
+
+      IX(i, j) {
+        return i + (this.N + 2) * j;
+      }
+
+      addDensity(x, y, amount) {
+        const N = this.N;
+        const i = Math.floor(x);
+        const j = Math.floor(y);
+        if (i < 1 || i > N || j < 1 || j > N) return;
+        this.density[this.IX(i, j)] += amount;
+      }
+
+      addVelocity(x, y, amountX, amountY) {
+        const N = this.N;
+        const i = Math.floor(x);
+        const j = Math.floor(y);
+        if (i < 1 || i > N || j < 1 || j > N) return;
+        const index = this.IX(i, j);
+        this.Vx[index] += amountX;
+        this.Vy[index] += amountY;
+      }
+
+      step() {
+        const N = this.N;
+        const visc = this.visc;
+        const diff = this.diff;
+        const dt = this.dt;
+
+        const Vx = this.Vx;
+        const Vy = this.Vy;
+        const Vx0 = this.Vx0;
+        const Vy0 = this.Vy0;
+        const s = this.s;
+        const density = this.density;
+
+        // Velocity step
+        this.addSource(Vx, Vx0, dt);
+        this.addSource(Vy, Vy0, dt);
+
+        this.swap(Vx0, Vx); this.diffuse(1, Vx, Vx0, visc, dt);
+        this.swap(Vy0, Vy); this.diffuse(2, Vy, Vy0, visc, dt);
+        this.project(Vx, Vy, Vx0, Vy0);
+
+        this.swap(Vx0, Vx); this.swap(Vy0, Vy);
+        this.advect(1, Vx, Vx0, Vx0, Vy0, dt);
+        this.advect(2, Vy, Vy0, Vx0, Vy0, dt);
+        this.project(Vx, Vy, Vx0, Vy0);
+
+        // Density step
+        this.addSource(density, s, dt);
+        this.swap(s, density); this.diffuse(0, density, s, diff, dt);
+        this.swap(s, density); this.advect(0, density, s, Vx, Vy, dt);
+
+        // Clear source arrays for next frame
+        Vx0.fill(0);
+        Vy0.fill(0);
+        s.fill(0);
+      }
+
+      addSource(x, s, dt) {
+        const size = (this.N + 2) * (this.N + 2);
+        for (let i = 0; i < size; i++) {
+          x[i] += dt * s[i];
+        }
+      }
+
+      setBnd(b, x) {
+        const N = this.N;
+        for (let i = 1; i <= N; i++) {
+          x[this.IX(i, 0)]     = b === 2 ? -x[this.IX(i, 1)]     : x[this.IX(i, 1)];
+          x[this.IX(i, N + 1)] = b === 2 ? -x[this.IX(i, N)]     : x[this.IX(i, N)];
+          x[this.IX(0, i)]     = b === 1 ? -x[this.IX(1, i)]     : x[this.IX(1, i)];
+          x[this.IX(N + 1, i)] = b === 1 ? -x[this.IX(N, i)]     : x[this.IX(N, i)];
+        }
+        x[this.IX(0, 0)]             = 0.5 * (x[this.IX(1, 0)]     + x[this.IX(0, 1)]);
+        x[this.IX(0, N + 1)]         = 0.5 * (x[this.IX(1, N + 1)] + x[this.IX(0, N)]);
+        x[this.IX(N + 1, 0)]         = 0.5 * (x[this.IX(N, 0)]     + x[this.IX(N + 1, 1)]);
+        x[this.IX(N + 1, N + 1)]     = 0.5 * (x[this.IX(N, N + 1)] + x[this.IX(N + 1, N)]);
+      }
+
+      linSolve(b, x, x0, a, c) {
+        const N = this.N;
+        // Gauss–Seidel relaxation
+        for (let k = 0; k < 20; k++) {
+          for (let i = 1; i <= N; i++) {
+            for (let j = 1; j <= N; j++) {
+              x[this.IX(i, j)] = (x0[this.IX(i, j)] +
+                a * (x[this.IX(i - 1, j)] + x[this.IX(i + 1, j)] +
+                     x[this.IX(i, j - 1)] + x[this.IX(i, j + 1)])) / c;
+            }
+          }
+          this.setBnd(b, x);
+        }
+      }
+
+      diffuse(b, x, x0, diff, dt) {
+        const N = this.N;
+        const a = dt * diff * N * N;
+        this.linSolve(b, x, x0, a, 1 + 4 * a);
+      }
+
+      project(velocX, velocY, p, div) {
+        const N = this.N;
+        const h = 1.0 / N;
+
+        for (let i = 1; i <= N; i++) {
+          for (let j = 1; j <= N; j++) {
+            div[this.IX(i, j)] = -0.5 * h * (
+              velocX[this.IX(i + 1, j)] - velocX[this.IX(i - 1, j)] +
+              velocY[this.IX(i, j + 1)] - velocY[this.IX(i, j - 1)]
+            );
+            p[this.IX(i, j)] = 0;
+          }
+        }
+        this.setBnd(0, div);
+        this.setBnd(0, p);
+        this.linSolve(0, p, div, 1, 4);
+
+        for (let i = 1; i <= N; i++) {
+          for (let j = 1; j <= N; j++) {
+            velocX[this.IX(i, j)] -= 0.5 * (p[this.IX(i + 1, j)] - p[this.IX(i - 1, j)]) / h;
+            velocY[this.IX(i, j)] -= 0.5 * (p[this.IX(i, j + 1)] - p[this.IX(i, j - 1)]) / h;
+          }
+        }
+        this.setBnd(1, velocX);
+        this.setBnd(2, velocY);
+      }
+
+      advect(b, d, d0, velocX, velocY, dt) {
+        const N = this.N;
+        let i0, i1, j0, j1;
+
+        const dtx = dt * N;
+        const dty = dt * N;
+
+        let s0, s1, t0, t1;
+        let tmp1, tmp2, x, y;
+
+        for (let i = 1; i <= N; i++) {
+          for (let j = 1; j <= N; j++) {
+            tmp1 = dtx * velocX[this.IX(i, j)];
+            tmp2 = dty * velocY[this.IX(i, j)];
+            x = i - tmp1;
+            y = j - tmp2;
+
+            if (x < 0.5) x = 0.5;
+            if (x > N + 0.5) x = N + 0.5;
+            i0 = Math.floor(x);
+            i1 = i0 + 1;
+
+            if (y < 0.5) y = 0.5;
+            if (y > N + 0.5) y = N + 0.5;
+            j0 = Math.floor(y);
+            j1 = j0 + 1;
+
+            s1 = x - i0;
+            s0 = 1 - s1;
+            t1 = y - j0;
+            t0 = 1 - t1;
+
+            const i0j0 = this.IX(i0, j0);
+            const i0j1 = this.IX(i0, j1);
+            const i1j0 = this.IX(i1, j0);
+            const i1j1 = this.IX(i1, j1);
+
+            d[this.IX(i, j)] =
+              s0 * (t0 * d0[i0j0] + t1 * d0[i0j1]) +
+              s1 * (t0 * d0[i1j0] + t1 * d0[i1j1]);
+          }
+        }
+        this.setBnd(b, d);
+      }
+
+      swap(x0, x) {
+        const tmp = x0;
+        for (let i = 0; i < x.length; i++) {
+          const t = x0[i];
+          x0[i] = x[i];
+          x[i] = t;
+        }
+      }
+    }
+
+    // ===================== SIM / RENDER SETUP ===================== //
+
+    const N = 128;           // grid resolution (N x N)
+    const dt = 0.1;          // time step
+    let diffusion = 0.0003;
+    let viscosity = 0.0005;
+
+    const fluid = new Fluid(N, diffusion, viscosity, dt);
+
+    const canvas = document.getElementById('sim');
+    const ctx = canvas.getContext('2d');
+
+    // Offscreen resolution is N x N, canvas is scaled via CSS (pixelated)
+    canvas.width = N;
+    canvas.height = N;
+
+    const fireBtn = document.getElementById('fireBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const viscSlider = document.getElementById('viscSlider');
+    const diffSlider = document.getElementById('diffSlider');
+    const ringRSlider = document.getElementById('ringRSlider');
+    const ringStrengthSlider = document.getElementById('ringStrengthSlider');
+    const displayModeEl = document.getElementById('displayMode');
+    const colorModeEl = document.getElementById('colorMode');
+
+    let displayMode = displayModeEl.value;
+    let colorMode = colorModeEl.value;
+
+    viscSlider.addEventListener('input', () => {
+      // Map 0-50 -> 0-0.005
+      const v = parseFloat(viscSlider.value) / 10000 * 10;
+      viscosity = v;
+      fluid.visc = viscosity;
+    });
+
+    diffSlider.addEventListener('input', () => {
+      // Map 0-30 -> 0-0.0006
+      const d = parseFloat(diffSlider.value) / 100000 * 20;
+      diffusion = d;
+      fluid.diff = diffusion;
+    });
+
+    displayModeEl.addEventListener('change', () => {
+      displayMode = displayModeEl.value;
+    });
+
+    colorModeEl.addEventListener('change', () => {
+      colorMode = colorModeEl.value;
+    });
+
+    clearBtn.addEventListener('click', () => {
+      fluid.density.fill(0);
+      fluid.Vx.fill(0);
+      fluid.Vy.fill(0);
+    });
+
+    // ===================== VORTEX RING (AIR CANNON) IMPULSE ===================== //
+
+    function fireVortexRing() {
+      const Ngrid = fluid.N;
+      const cx = Math.floor(Ngrid * 0.2);        // ring center x
+      const cy = Math.floor(Ngrid * 0.5);        // ring center y
+      const R = parseFloat(ringRSlider.value);   // radius in grid units
+      const strengthBase = parseFloat(ringStrengthSlider.value) / 1000; // scale
+      const thickness = R * 0.35;
+
+      const sigma2 = (thickness * thickness) * 0.5;
+
+      for (let i = 1; i <= Ngrid; i++) {
+        for (let j = 1; j <= Ngrid; j++) {
+          const dx = i - cx;
+          const dy = j - cy;
+          const r = Math.sqrt(dx*dx + dy*dy);
+          const dr = r - R;
+          if (Math.abs(dr) > thickness) continue;
+
+          const theta = Math.atan2(dy, dx);
+
+          // Tangential velocity around ring (2D cross-section of toroidal vortex)
+          const amp = strengthBase * Math.exp(-(dr*dr) / (2 * sigma2));
+
+          const vt_x = -Math.sin(theta) * amp; // tangential direction
+          const vt_y =  Math.cos(theta) * amp;
+
+          const idx = fluid.IX(i, j);
+          fluid.Vx[idx] += vt_x * 200;
+          fluid.Vy[idx] += vt_y * 200;
+
+          // Add net forward push (air cannon blow) in +x
+          fluid.Vx[idx] += strengthBase * 200;
+
+          // Add density “puff”
+          fluid.density[idx] += 50;
+        }
+      }
+    }
+
+    fireBtn.addEventListener('click', fireVortexRing);
+
+    // ===================== USER INTERACTION (DRAG TO STIR) ===================== //
+
+    let pointerDown = false;
+    let lastPointer = null;
+
+    function getPointerPos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) / rect.width * N;
+      const y = (evt.clientY - rect.top) / rect.height * N;
+      return { x, y };
+    }
+
+    function pointerStart(evt) {
+      pointerDown = true;
+      const p = getPointerPos(evt);
+      lastPointer = p;
+      // Add some density at the touch point
+      fluid.addDensity(p.x, p.y, 100);
+      evt.preventDefault();
+    }
+
+    function pointerMove(evt) {
+      if (!pointerDown) return;
+      const p = getPointerPos(evt);
+      if (lastPointer) {
+        const dx = p.x - lastPointer.x;
+        const dy = p.y - lastPointer.y;
+        const forceScale = 20;
+        fluid.addVelocity(p.x, p.y, dx * forceScale, dy * forceScale);
+        fluid.addDensity(p.x, p.y, 60);
+      }
+      lastPointer = p;
+      evt.preventDefault();
+    }
+
+    function pointerEnd(evt) {
+      pointerDown = false;
+      lastPointer = null;
+      evt.preventDefault();
+    }
+
+    canvas.addEventListener('mousedown', pointerStart);
+    canvas.addEventListener('mousemove', pointerMove);
+    window.addEventListener('mouseup', pointerEnd);
+
+    canvas.addEventListener('touchstart', (e) => pointerStart(e.touches[0]), { passive: false });
+    canvas.addEventListener('touchmove', (e) => pointerMove(e.touches[0]), { passive: false });
+    canvas.addEventListener('touchend', pointerEnd, { passive: false });
+
+    // ===================== COLOR MAPPING ===================== //
+
+    function clamp01(v) {
+      return v < 0 ? 0 : (v > 1 ? 1 : v);
+    }
+
+    function densityToColor(d, vorticityValue, speedValue) {
+      // choose scalar based on display mode then map to RGB
+      let val;
+      if (displayMode === 'density') {
+        val = d / 100.0;
+      } else if (displayMode === 'vorticity') {
+        // vorticityValue in [-?, ?], scale for visibility
+        val = Math.abs(vorticityValue) * 3;
+      } else if (displayMode === 'velocity') {
+        val = speedValue * 4;
+      } else {
+        val = d / 100.0;
+      }
+      val = clamp01(val);
+
+      let r = 0, g = 0, b = 0;
+
+      switch (colorMode) {
+        case 'fire':
+          // black → red → yellow → white
+          if (val < 0.33) {
+            r = val * 3 * 255;
+            g = 0;
+            b = 0;
+          } else if (val < 0.66) {
+            r = 255;
+            g = (val - 0.33) * 3 * 255;
+            b = 0;
+          } else {
+            r = 255;
+            g = 255;
+            b = (val - 0.66) * 3 * 255;
+          }
+          break;
+        case 'ice':
+          // dark blue → cyan → white
+          r = val * 100;
+          g = 150 * val + 50;
+          b = 255 * (0.5 + 0.5 * val);
+          break;
+        case 'plasma':
+          // pseudo "plasma" colormap
+          r = 255 * clamp01(1.5 * val);
+          g = 255 * clamp01(2.0 * val * (1 - val));
+          b = 255 * clamp01(1.0 - val);
+          break;
+        case 'greyscale':
+        default:
+          r = g = b = val * 255;
+          break;
+      }
+
+      return [r | 0, g | 0, b | 0];
+    }
+
+    // ===================== RENDER LOOP ===================== //
+
+    const imageData = ctx.createImageData(N, N);
+    const buf = imageData.data;
+
+    function renderDensity() {
+      const Ngrid = fluid.N;
+      const Vx = fluid.Vx;
+      const Vy = fluid.Vy;
+      const dens = fluid.density;
+
+      for (let j = 0; j < Ngrid; j++) {
+        for (let i = 0; i < Ngrid; i++) {
+          const idxFluid = fluid.IX(i + 1, j + 1);
+
+          const d = dens[idxFluid];
+
+          // vorticity (curl z) approximation
+          const vxUp    = Vx[fluid.IX(i + 1, j + 2)];
+          const vxDown  = Vx[fluid.IX(i + 1, j)];
+          const vyRight = Vy[fluid.IX(i + 2, j + 1)];
+          const vyLeft  = Vy[fluid.IX(i,     j + 1)];
+          const vort = 0.5 * ((vyRight - vyLeft) - (vxUp - vxDown));
+
+          const vx = Vx[idxFluid];
+          const vy = Vy[idxFluid];
+          const speed = Math.sqrt(vx * vx + vy * vy);
+
+          const [r, g, b] = densityToColor(d, vort, speed);
+
+          const idxImg = 4 * (i + j * Ngrid);
+          buf[idxImg + 0] = r;
+          buf[idxImg + 1] = g;
+          buf[idxImg + 2] = b;
+          buf[idxImg + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function loop() {
+      fluid.step();
+      renderDensity();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>

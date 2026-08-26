@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Mini Voxel World — Single File (Three.js)</title>
+<style>
+  html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,'Noto Sans KR',sans-serif}
+  canvas{display:block}
+  /* UI overlay */
+  #ui {
+    position:fixed;left:0;right:0;top:0;bottom:0;pointer-events:none;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  }
+  .crosshair {
+    position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:16px;height:16px;pointer-events:none;
+  }
+  .crosshair:before, .crosshair:after{
+    content:"";position:absolute;background:rgba(255,255,255,0.9);
+  }
+  .crosshair:before{left:7px;top:0;width:2px;height:16px}
+  .crosshair:after{top:7px;left:0;width:16px;height:2px}
+  #hud {
+    position:fixed;left:12px;top:12px;color:white;text-shadow:0 1px 4px rgba(0,0,0,0.6);
+    pointer-events:auto;
+  }
+  #inventory {
+    position:fixed;left:50%;transform:translateX(-50%);bottom:12px;
+    display:flex;gap:8px;padding:8px;background:rgba(0,0,0,0.35);border-radius:8px;
+    pointer-events:auto;
+  }
+  .slot {width:48px;height:48px;border-radius:6px;border:2px solid rgba(255,255,255,0.12);
+         display:flex;align-items:center;justify-content:center;color:white;font-weight:600}
+  .slot.selected {outline:3px solid rgba(255,255,255,0.9)}
+  /* Small helper text */
+  .hint{font-size:12px;color:rgba(255,255,255,0.9);margin-top:6px;text-align:center}
+</style>
+</head>
+<body>
+<!-- Scene will render to this canvas created by Three.js -->
+<div id="ui">
+  <div class="crosshair" aria-hidden="true"></div>
+  <div id="hud" aria-hidden="false">
+    <div id="status">WASD/Arrows: move • QE / ↑↓←→: look • Space: jump</div>
+    <div id="controls" style="margin-top:6px">Break: X • Place: C • Inventory: 1-3</div>
+  </div>
+  <div id="inventory" role="toolbar" aria-label="Inventory">
+    <div class="slot selected" data-type="1" title="Grass" id="slot-1">1<br>Grass</div>
+    <div class="slot" data-type="2" title="Dirt" id="slot-2">2<br>Dirt</div>
+    <div class="slot" data-type="3" title="Stone" id="slot-3">3<br>Stone</div>
+  </div>
+
+<!-- Single-file JS below -->
+<script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+<script>
+/* ===========================================================
+   Mini Voxel World — Single-file Three.js game
+   Sections:
+   - Scene setup
+   - Controls (keyboard + touch)
+   - Physics & player collision
+   - Blocks & terrain generation
+   - Inventory, breaking & placing
+   - Animation loop & rendering
+   =========================================================== */
+
+/* ------------------- Scene setup ------------------- */
+// Create renderer, scene, camera
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+// Sky color
+renderer.setClearColor(new THREE.Color(0x87ceeb)); // light sky blue
+
+// Camera: we will control yaw & pitch manually (no pointer lock)
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.position.set(0, 2, 5);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+sun.position.set(10, 20, 10);
+sun.castShadow = false;
+scene.add(sun);
+
+// Resize handling
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+/* ------------------- Simple world & block system ------------------- */
+// World dimensions (small and fixed)
+const WORLD = { width: 32, depth: 32, height: 12, offsetX: -8, offsetZ: -8 };
+const blockSize = 1;
+const blocks = {}; // map "x,y,z" -> {type, mesh}
+
+// Materials (simple color materials)
+const materials = {
+  1: new THREE.MeshLambertMaterial({color:0x4caf50}), // grass (green)
+  2: new THREE.MeshLambertMaterial({color:0x8b5a2b}), // dirt (brown)
+  3: new THREE.MeshLambertMaterial({color:0x888888})  // stone (gray)
+};
+
+// A helper to key coordinates
+function key(x,y,z){return `${x},${y},${z}`;}
+
+// Create a cube mesh for a block type at position
+function createBlockMesh(x,y,z,type){
+  const geom = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+  const mesh = new THREE.Mesh(geom, materials[type]);
+  mesh.position.set(x + blockSize*0.5, y + blockSize*0.5, z + blockSize*0.5);
+  mesh.userData.blockPos = {x,y,z};
+  scene.add(mesh);
+  return mesh;
+}
+
+// Simple terrain generation: stacked layers with variation using sines
+for(let ix=0; ix<WORLD.width; ix++){
+  for(let iz=0; iz<WORLD.depth; iz++){
+    // Terrain height via combined sine waves (cheap pseudo-noise)
+    const wx = ix + WORLD.offsetX;
+    const wz = iz + WORLD.offsetZ;
+    const h = Math.floor(3 + Math.sin(wx*0.5)*1.5 + Math.cos(wz*0.4)*1.2 + Math.sin((wx+wz)*0.25));
+    for(let y=0;y< WORLD.height;y++){
+      const globalY = y;
+      let type = 0;
+      if(globalY < h - 1) type = 3; // stone deep
+      else if(globalY < h) type = 2; // dirt
+      else if(globalY === h) type = 1; // grass on top
+      if(type){
+        const x = ix + WORLD.offsetX;
+        const z = iz + WORLD.offsetZ;
+        const mesh = createBlockMesh(x, globalY, z, type);
+        blocks[key(x,globalY,z)] = {type, mesh};
+      }
+    }
+  }
+}
+
+/* ------------------- Player & Physics ------------------- */
+// Player physical parameters
+const player = {
+  pos: new THREE.Vector3(0, 4, 0), // center at feet? we'll treat pos as feet level
+  velocity: new THREE.Vector3(),
+  yaw: 0, // rotation around y
+  pitch: 0, // up/down
+  speed: 4.0, // m/s
+  width: 0.6, // collision width (x & z)
+  height: 1.8,
+  onGround: false
+};
+
+// Keep camera bound to player
+function updateCameraFromPlayer(){
+  // compute camera position as player.pos + eye offset
+  const eye = player.pos.clone();
+  eye.y += player.height * 0.9;
+  camera.position.copy(eye);
+  // compute rotation from yaw/pitch
+  camera.rotation.order = "YXZ";
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+}
+
+// Physics constants
+const GRAVITY = -9.8;
+const JUMP_SPEED = 5;
+const EPS = 1e-4;
+
+// Basic function to test AABB collision between player and a block
+function aabbIntersectsBlock(px, py, pz, pw, ph, blockX, blockY, blockZ){
+  // player box: centered on px? We'll compute min/max
+  const pmin = {x: px - pw/2, y: py, z: pz - pw/2};
+  const pmax = {x: px + pw/2, y: py + ph, z: pz + pw/2};
+  const bmin = {x: blockX, y:blockY, z:blockZ};
+  const bmax = {x:blockX+1, y:blockY+1, z:blockZ+1};
+  return !(pmax.x <= bmin.x || pmin.x >= bmax.x || pmax.y <= bmin.y || pmin.y >= bmax.y || pmax.z <= bmin.z || pmin.z >= bmax.z);
+}
+
+// Check collisions and resolve by axis separation (simple)
+function resolveCollisions(desiredPos){
+  // We'll move separately along X, Y, Z to simplify
+  const original = player.pos.clone();
+  const result = original.clone();
+
+  // helper to check collisions at candidate pos
+  function collidesAt(cx, cy, cz){
+    // examine blocks near player
+    const minX = Math.floor(cx - player.width/2) - 1;
+    const maxX = Math.floor(cx + player.width/2) + 1;
+    const minY = Math.floor(cy) - 1;
+    const maxY = Math.floor(cy + player.height) + 1;
+    const minZ = Math.floor(cz - player.width/2) - 1;
+    const maxZ = Math.floor(cz + player.width/2) + 1;
+    for(let x=minX;x<=maxX;x++){
+      for(let y=minY;y<=maxY;y++){
+        for(let z=minZ;z<=maxZ;z++){
+          const b = blocks[key(x,y,z)];
+          if(!b) continue;
+          if(aabbIntersectsBlock(cx, cy, cz, player.width, player.height, x,y,z)){
+            return {x,y,z};
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // X axis
+  if(Math.abs(desiredPos.x - original.x) > EPS){
+    const candidate = original.clone();
+    candidate.x = desiredPos.x;
+    const c = collidesAt(candidate.x, candidate.y, candidate.z);
+    if(!c) result.x = candidate.x;
+    else {
+      // push out to nearest face
+      if(desiredPos.x > original.x) result.x = c.x - player.width/2 - EPS;
+      else result.x = c.x + 1 + player.width/2 + EPS;
+      player.velocity.x = 0;
+    }
+  }
+  // Y axis
+  if(Math.abs(desiredPos.y - original.y) > EPS){
+    const candidate = result.clone();
+    candidate.y = desiredPos.y;
+    const c = collidesAt(candidate.x, candidate.y, candidate.z);
+    if(!c) result.y = candidate.y;
+    else {
+      if(desiredPos.y > original.y){ // moving up hit head
+        result.y = c.y - player.height - EPS;
+        player.velocity.y = Math.min(0, player.velocity.y);
+      } else { // moving down, landed
+        result.y = c.y + 1 + EPS;
+        player.velocity.y = 0;
+        player.onGround = true;
+      }
+    }
+  }
+
+  // Z axis
+  if(Math.abs(desiredPos.z - original.z) > EPS){
+    const candidate = result.clone();
+    candidate.z = desiredPos.z;
+    const c = collidesAt(candidate.x, candidate.y, candidate.z);
+    if(!c) result.z = candidate.z;
+    else {
+      if(desiredPos.z > original.z) result.z = c.z - player.width/2 - EPS;
+      else result.z = c.z + 1 + player.width/2 + EPS;
+      player.velocity.z = 0;
+    }
+  }
+
+  return result;
+}
+
+/* ------------------- Controls (keyboard) ------------------- */
+// Input state
+const input = {
+  forward:false, back:false, left:false, right:false,
+  lookLeft:false, lookRight:false, lookUp:false, lookDown:false,
+  jump:false, break:false, place:false
+};
+
+// Keyboard controls
+window.addEventListener('keydown', (e)=>{
+  if(e.repeat) return;
+  switch(e.code){
+    case 'KeyW': input.forward=true; break;
+    case 'KeyS': input.back=true; break;
+    case 'KeyA': input.left=true; break;
+    case 'KeyD': input.right=true; break;
+    case 'ArrowUp': input.lookUp=true; break;
+    case 'ArrowDown': input.lookDown=true; break;
+    case 'ArrowLeft': input.lookLeft=true; break;
+    case 'ArrowRight': input.lookRight=true; break;
+    case 'ArrowUp': /* handled above for forward */ break;
+    case 'ArrowLeft': /* handled above for left */ break;
+    case 'Space': input.jump=true; break;
+    case 'KeyX': input.break=true; break;
+    case 'KeyC': input.place=true; break;
+    case 'Digit1': setSelectedType(1); break;
+    case 'Digit2': setSelectedType(2); break;
+    case 'Digit3': setSelectedType(3); break;
+  }
+});
+window.addEventListener('keyup', (e)=>{
+  switch(e.code){
+    case 'KeyW': input.forward=false; break;
+    case 'KeyS': input.back=false; break;
+    case 'KeyA': input.left=false; break;
+    case 'KeyD': input.right=false; break;
+    case 'ArrowUp': input.lookUp=false; break;
+    case 'ArrowDown': input.lookDown=false; break;
+    case 'ArrowLeft': input.lookLeft=false; break;
+    case 'ArrowRight': input.lookRight=false; break;
+    case 'Space': input.jump=false; break;
+    case 'KeyX': input.break=false; break;
+    case 'KeyC': input.place=false; break;
+  }
+});
+
+
+
+/* ------------------- Inventory & UI ------------------- */
+let selectedType = 1;
+const slots = document.querySelectorAll('.slot');
+slots.forEach(s=>{
+  s.addEventListener('click', ()=>{
+    const t = Number(s.dataset.type);
+    setSelectedType(t);
+  });
+});
+function setSelectedType(t){
+  selectedType = t;
+  slots.forEach(s=> s.classList.toggle('selected', Number(s.dataset.type) === t));
+}
+
+/* ------------------- Raycasting for break/place ------------------- */
+const raycaster = new THREE.Raycaster();
+function getCameraDirection(){
+  const dir = new THREE.Vector3(0,0,-1);
+  dir.applyQuaternion(camera.quaternion);
+  return dir;
+}
+function findTargetBlock(maxDist=6){
+  const origin = camera.position.clone();
+  const dir = getCameraDirection();
+  raycaster.set(origin, dir);
+  // Build list of meshes to test (all block meshes)
+  const meshes = Object.values(blocks).map(b=>b.mesh);
+  const intersects = raycaster.intersectObjects(meshes, false);
+  if(intersects.length>0 && intersects[0].distance <= maxDist){
+    const it = intersects[0];
+    const pos = it.object.userData.blockPos;
+    const faceNormal = it.face.normal.clone();
+    return {blockPos: pos, normal: faceNormal, hitPoint: it.point};
+  }
+  return null;
+}
+
+function performBreak(){
+  const t = findTargetBlock();
+  if(!t) return;
+  const k = key(t.blockPos.x, t.blockPos.y, t.blockPos.z);
+  const entry = blocks[k];
+  if(entry){
+    scene.remove(entry.mesh);
+    delete blocks[k];
+  }
+}
+
+function performPlace(){
+  const t = findTargetBlock();
+  if(!t) return;
+  // place at adjacent cell along normal
+  const nx = t.blockPos.x + t.normal.x;
+  const ny = t.blockPos.y + t.normal.y;
+  const nz = t.blockPos.z + t.normal.z;
+  const kp = key(nx,ny,nz);
+  if(blocks[kp]) return; // occupied
+  // Do not place inside player
+  if(aabbIntersectsBlock(player.pos.x, player.pos.y, player.pos.z, player.width, player.height, nx, ny, nz)) return;
+  const mesh = createBlockMesh(nx,ny,nz, selectedType);
+  blocks[kp] = {type:selectedType, mesh};
+}
+
+/* ------------------- Main Update & Animation Loop ------------------- */
+let lastTime = performance.now();
+
+function update(dt){
+  // Look controls (keyboard + touch)
+  const lookSpeed = 1.5; // rad/s
+  if(input.lookLeft) player.yaw += lookSpeed * dt;
+  if(input.lookRight) player.yaw -= lookSpeed * dt;
+  if(input.lookUp) player.pitch = Math.max(-Math.PI/2 + 0.01, player.pitch + lookSpeed * dt);
+  if(input.lookDown) player.pitch = Math.min(Math.PI/2 - 0.01, player.pitch - lookSpeed * dt);
+
+// --- Local movement input ---
+const forwardInput = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
+const strafeInput  = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+
+// Normalize to avoid faster diagonal speed
+let inputLength = Math.hypot(forwardInput, strafeInput);
+let localX = 0, localZ = 0;
+if (inputLength > 0) {
+    localX = (strafeInput / inputLength) * player.speed;
+    localZ = (forwardInput / inputLength) * player.speed;
+}
+
+// --- Rotate local movement vector by camera yaw ---
+const yaw = player.yaw; // or camera.rotation.y if you prefer
+const sinYaw = Math.sin(yaw);
+const cosYaw = Math.cos(yaw);
+
+const worldX = localX * cosYaw - localZ * sinYaw;
+const worldZ = -localX * sinYaw - localZ * cosYaw;
+
+// --- Apply horizontal velocities ---
+player.velocity.x = worldX;
+player.velocity.z = worldZ;
+
+  // Jump
+  if(input.jump && player.onGround){
+    player.velocity.y = JUMP_SPEED;
+    player.onGround = false;
+  }
+
+  // Gravity
+  player.velocity.y += GRAVITY * dt;
+
+  // integrate position
+  const desiredPos = player.pos.clone().addScaledVector(player.velocity, dt);
+
+  // Reset onGround; resolve collisions will set it true if landing
+  player.onGround = false;
+  const resolved = resolveCollisions(desiredPos);
+  player.pos.copy(resolved);
+
+  // Prevent falling below certain depth
+  if(player.pos.y < -50) {
+    player.pos.set(0, 6, 0);
+    player.velocity.set(0,0,0);
+  }
+
+  // Actions: break/place via keyboard (single action per press)
+  // We'll implement simple edge-detection by tracking last state
+  // (Alternatively, allow repeated if held - here we do edge)
+  if(input.break && !input._breakHandled){
+    performBreak();
+    input._breakHandled = true;
+  }
+  if(!input.break) input._breakHandled = false;
+
+  if(input.place && !input._placeHandled){
+    performPlace();
+    input._placeHandled = true;
+  }
+  if(!input.place) input._placeHandled = false;
+
+  // Update camera
+  updateCameraFromPlayer();
+}
+
+// Render loop
+function animate(t){
+  const now = t;
+  const dt = Math.min(0.05, (now - lastTime) / 1000); // cap dt
+  lastTime = now;
+
+  update(dt);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+/* ------------------- Mouse-free look: keyboard arrow mapping (for convenience) ------------------- */
+window.addEventListener('keydown', (e)=>{
+  // mapping: Arrow keys already used for movement; use Home/End/PageUp/PageDown as alternate? 
+  // But user asked arrow keys or WASD for movement and arrows for look — we used arrows for movement.
+  // We provide alternative keys: Left/Right for strafing; Q/E for yaw (implemented).
+});
+
+/* ------------------- Accessibility / simple instructions ------------------- */
+// Provide clickable HUD actions for desktop to break/place
+document.getElementById('status').addEventListener('click', ()=> alert('Controls:\nWASD or arrows: move\nQ/E or look buttons: turn\nSpace: jump\nX: break\nC: place\n1-3: select block type'));
+
+
+// Simple pointer for desktop: allow click on break/place via keyboard UI (for those who prefer)
+window.addEventListener('keypress', (e)=>{
+  if(e.key === 'x' || e.key === 'X') performBreak();
+  if(e.key === 'c' || e.key === 'C') performPlace();
+});
+
+// Center the camera initially
+updateCameraFromPlayer();
+
+</script>
+</body>
+</html>

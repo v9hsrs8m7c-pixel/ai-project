@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dual HTML Player (Side-by-side, Resizable)</title>
+  <style>
+    :root{
+      --bg:#0b0f14;
+      --panel:#111723;
+      --line:#26344e;
+      --text:#dde3f3;
+      --muted:#9aa7c2;
+      --accent:#6aa9ff;
+      --sash:#1c2738;
+      --sashHover:#35507a;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:linear-gradient(180deg,#0b0f14,#0b0f14 60%,#0f1624);
+      color:var(--text);
+      font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;
+      height:100svh; display:flex; flex-direction:column;
+    }
+
+    header{
+      padding:12px 14px;
+      background:rgba(17,23,35,.9);
+      border-bottom:1px solid var(--line);
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    }
+    header .group{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    button, .filebtn, select, input[type="text"]{
+      background:#0e1522; color:var(--text);
+      border:1px solid #273145; border-radius:10px;
+      padding:9px 11px; outline:none;
+    }
+    button, .filebtn{cursor:pointer}
+    button:hover, .filebtn:hover{border-color:var(--sashHover)}
+    button:active{transform:translateY(1px)}
+    .filebtn input{display:none}
+    .pill{
+      border:1px solid #2a3a58; border-radius:999px;
+      padding:4px 10px; font-size:12px; color:var(--muted);
+    }
+    .hint{color:var(--muted); font-size:12px}
+
+    /* Split panes */
+    .split{
+      position:relative;
+      flex:1;
+      display:flex;
+      min-height:0; /* allow children to flex properly */
+    }
+    .pane{
+      min-width:220px;
+      flex:0 0 auto;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    .paneHeader{
+      padding:10px 12px;
+      background:rgba(17,23,35,.85);
+      border-bottom:1px solid var(--line);
+      display:flex; gap:10px; align-items:center; justify-content:space-between;
+    }
+    .paneHeader .title{font-weight:600}
+    .paneHeader .path{color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:46vw}
+    .frameWrap{
+      flex:1;
+      min-height:0;
+      background:#0e1522;
+    }
+
+    iframe{
+      width:100%;
+      height:100%;
+      border:0;
+      display:block;
+      background:white;
+    }
+
+    /* Draggable sash */
+    .sash{
+      width:8px;
+      cursor:col-resize;
+      background:linear-gradient(90deg, transparent, var(--sash), transparent);
+      position:relative;
+      flex:0 0 8px;
+    }
+    .sash:hover{background:linear-gradient(90deg, transparent, var(--sashHover), transparent)}
+    .sash::after{
+      content:"";
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      width:3px;
+      height:48px;
+      border-radius:999px;
+      background:rgba(220,227,243,.18);
+    }
+
+    footer{
+      padding:10px 14px;
+      border-top:1px solid var(--line);
+      background:rgba(17,23,35,.9);
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    /* Small screens: stack */
+    @media (max-width: 900px){
+      .split{flex-direction:column}
+      .sash{width:100%; height:10px; cursor:row-resize; flex:0 0 10px;
+        background:linear-gradient(180deg, transparent, var(--sash), transparent);
+      }
+      .sash:hover{background:linear-gradient(180deg, transparent, var(--sashHover), transparent)}
+      .sash::after{width:48px; height:3px}
+      .paneHeader .path{max-width:70vw}
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="group">
+    <span class="pill">Dual HTML Player</span>
+    <span class="hint">Load two HTML files and play them at the same time. Drag the divider to resize.</span>
+  </div>
+
+  <div class="group" style="margin-left:auto">
+    <label class="filebtn" title="Load HTML into Left">
+      Open Left…
+      <input id="fileLeft" type="file" accept=".html,.htm,text/html" />
+    </label>
+    <label class="filebtn" title="Load HTML into Right">
+      Open Right…
+      <input id="fileRight" type="file" accept=".html,.htm,text/html" />
+    </label>
+    <button id="openBoth">Open Both (same file)…</button>
+    <button id="swap">Swap</button>
+    <button id="resetSplit">Reset Split</button>
+  </div>
+</header>
+
+<div class="split" id="split">
+  <section class="pane" id="leftPane">
+    <div class="paneHeader">
+      <div>
+        <div class="title">Left</div>
+        <div class="path" id="leftPath">No file loaded</div>
+      </div>
+      <button id="reloadLeft" title="Reload left from last file">Reload</button>
+    </div>
+    <div class="frameWrap">
+      <iframe id="leftFrame"
+        sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads"
+        referrerpolicy="no-referrer"></iframe>
+    </div>
+  </section>
+
+  <div class="sash" id="sash" aria-label="Resize divider" title="Drag to resize"></div>
+
+  <section class="pane" id="rightPane">
+    <div class="paneHeader">
+      <div>
+        <div class="title">Right</div>
+        <div class="path" id="rightPath">No file loaded</div>
+      </div>
+      <button id="reloadRight" title="Reload right from last file">Reload</button>
+    </div>
+    <div class="frameWrap">
+      <iframe id="rightFrame"
+        sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads"
+        referrerpolicy="no-referrer"></iframe>
+    </div>
+  </section>
+</div>
+
+<footer>
+  Note: this loads HTML via <b>srcdoc</b> (file contents). Best for single-file games/apps. If your HTML depends on external local files (images/js/css), those relative files won’t load unless they’re online.
+</footer>
+
+<script>
+(() => {
+  const split = document.getElementById('split');
+  const sash = document.getElementById('sash');
+  const leftPane = document.getElementById('leftPane');
+  const rightPane = document.getElementById('rightPane');
+
+  const leftFrame = document.getElementById('leftFrame');
+  const rightFrame = document.getElementById('rightFrame');
+
+  const fileLeft = document.getElementById('fileLeft');
+  const fileRight = document.getElementById('fileRight');
+
+  const leftPath = document.getElementById('leftPath');
+  const rightPath = document.getElementById('rightPath');
+
+  const reloadLeftBtn = document.getElementById('reloadLeft');
+  const reloadRightBtn = document.getElementById('reloadRight');
+  const openBothBtn = document.getElementById('openBoth');
+  const swapBtn = document.getElementById('swap');
+  const resetSplitBtn = document.getElementById('resetSplit');
+
+  let lastLeftFile = null;
+  let lastRightFile = null;
+
+  // --- Split orientation awareness (row vs col) ---
+  const isVerticalStack = () => window.matchMedia("(max-width: 900px)").matches;
+
+  function setSplitRatio(ratio){
+    ratio = Math.max(0.15, Math.min(0.85, ratio));
+    // Use flex-basis for left/top pane; right/bottom takes the rest
+    if(!isVerticalStack()){
+      const total = split.clientWidth;
+      const sashW = sash.getBoundingClientRect().width;
+      const leftW = Math.floor((total - sashW) * ratio);
+      leftPane.style.flexBasis = leftW + "px";
+      rightPane.style.flexBasis = (total - sashW - leftW) + "px";
+    } else {
+      const total = split.clientHeight;
+      const sashH = sash.getBoundingClientRect().height;
+      const topH = Math.floor((total - sashH) * ratio);
+      leftPane.style.flexBasis = topH + "px";
+      rightPane.style.flexBasis = (total - sashH - topH) + "px";
+    }
+    localStorage.setItem("dual_html_split_ratio", String(ratio));
+  }
+
+  function getSavedRatio(){
+    const v = parseFloat(localStorage.getItem("dual_html_split_ratio") || "");
+    return Number.isFinite(v) ? v : 0.5;
+  }
+
+  // init split
+  setSplitRatio(getSavedRatio());
+  window.addEventListener("resize", () => setSplitRatio(getSavedRatio()));
+
+  // --- Dragging sash ---
+  let dragging = false;
+
+  function pointerDown(e){
+    dragging = true;
+    sash.setPointerCapture(e.pointerId);
+    document.body.style.userSelect = "none";
+  }
+
+  function pointerMove(e){
+    if(!dragging) return;
+    const rect = split.getBoundingClientRect();
+
+    if(!isVerticalStack()){
+      const x = e.clientX - rect.left;
+      const ratio = x / rect.width;
+      setSplitRatio(ratio);
+    } else {
+      const y = e.clientY - rect.top;
+      const ratio = y / rect.height;
+      setSplitRatio(ratio);
+    }
+  }
+
+  function pointerUp(){
+    dragging = false;
+    document.body.style.userSelect = "";
+  }
+
+  sash.addEventListener("pointerdown", pointerDown);
+  sash.addEventListener("pointermove", pointerMove);
+  sash.addEventListener("pointerup", pointerUp);
+  sash.addEventListener("pointercancel", pointerUp);
+
+  // --- Loading HTML into an iframe via srcdoc ---
+  async function readFileAsText(file){
+    return await file.text();
+  }
+
+  function wrapWithBase(html, file){
+    // Helps with absolute URLs inside the file, but NOT local relative assets (browser security).
+    // Still useful for <a href="..."> that are relative.
+    const baseHref = ""; // intentionally blank; cannot reliably use file:// for relative assets in most browsers
+    // If you *do* want to try: const baseHref = 'file:///' + file.webkitRelativePath ...
+    // But most browsers won't allow loading local assets from srcdoc anyway.
+
+    const baseTag = baseHref ? `<base href="${baseHref}">` : "";
+    // Ensure there is a <head> to place <base> into if needed
+    if(!baseTag) return html;
+
+    if(/<head[\s>]/i.test(html)){
+      return html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
+    }
+    if(/<html[\s>]/i.test(html)){
+      return html.replace(/<html([^>]*)>/i, `<html$1><head>${baseTag}</head>`);
+    }
+    return `<head>${baseTag}</head>` + html;
+  }
+
+  async function loadInto(side, file){
+    if(!file) return;
+    const html = await readFileAsText(file);
+    const safeHtml = wrapWithBase(html, file);
+
+    if(side === "left"){
+      lastLeftFile = file;
+      leftFrame.srcdoc = safeHtml;
+      leftPath.textContent = file.name;
+    } else {
+      lastRightFile = file;
+      rightFrame.srcdoc = safeHtml;
+      rightPath.textContent = file.name;
+    }
+  }
+
+  // File inputs
+  fileLeft.addEventListener("change", async () => {
+    const f = fileLeft.files && fileLeft.files[0];
+    if(f) await loadInto("left", f);
+    fileLeft.value = "";
+  });
+
+  fileRight.addEventListener("change", async () => {
+    const f = fileRight.files && fileRight.files[0];
+    if(f) await loadInto("right", f);
+    fileRight.value = "";
+  });
+
+  // Open both with same file
+  openBothBtn.addEventListener("click", () => {
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = ".html,.htm,text/html";
+    picker.onchange = async () => {
+      const f = picker.files && picker.files[0];
+      if(!f) return;
+      await loadInto("left", f);
+      await loadInto("right", f);
+    };
+    picker.click();
+  });
+
+  // Reload buttons
+  reloadLeftBtn.addEventListener("click", async () => {
+    if(!lastLeftFile) return;
+    await loadInto("left", lastLeftFile);
+  });
+  reloadRightBtn.addEventListener("click", async () => {
+    if(!lastRightFile) return;
+    await loadInto("right", lastRightFile);
+  });
+
+  // Swap contents
+  swapBtn.addEventListener("click", () => {
+    const a = leftFrame.srcdoc, b = rightFrame.srcdoc;
+    leftFrame.srcdoc = b;
+    rightFrame.srcdoc = a;
+
+    const ap = leftPath.textContent, bp = rightPath.textContent;
+    leftPath.textContent = bp;
+    rightPath.textContent = ap;
+
+    const lf = lastLeftFile; lastLeftFile = lastRightFile; lastRightFile = lf;
+  });
+
+  resetSplitBtn.addEventListener("click", () => setSplitRatio(0.5));
+
+  // Optional: keyboard shortcut for split reset
+  window.addEventListener("keydown", (e) => {
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "0"){
+      e.preventDefault();
+      setSplitRatio(0.5);
+    }
+  });
+})();
+</script>
+</body>
+</html>
