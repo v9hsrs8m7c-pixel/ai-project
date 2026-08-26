@@ -51,7 +51,7 @@ ENGINES.snake = function (g) {
 
 ENGINES.ioeat = function (g) {
   const W = g.w, H = g.h; let me, foods, blobs, score;
-  function init() { me = { x: W / 2, y: H / 2, r: 14, vx: 0, vy: 0 }; foods = []; blobs = []; for (let i = 0; i < 40; i++)foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); for (let i = 0; i < (g.bots || 6); i++) { let bx, by; do { bx = rand(0, W); by = rand(0, H); } while (Math.hypot(bx - W / 2, by - H / 2) < 70); blobs.push({ x: bx, y: by, r: rand(10, 26), c: "#f43f5e", vx: rand(-1, 1), vy: rand(-1, 1) }); } score = 0; }
+  function init() { me = { x: W / 2, y: H / 2, r: 14, vx: 0, vy: 0 }; foods = []; blobs = []; for (let i = 0; i < 40; i++)foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); for (let i = 0; i < (g.bots || 6); i++) { let bx, by; do { bx = rand(0, W); by = rand(0, H); } while (Math.hypot(bx - W / 2, by - H / 2) < 70); blobs.push({ x: bx, y: by, r: rand(8, 13), c: "#f43f5e", vx: rand(-1, 1), vy: rand(-1, 1) }); } score = 0; }
   function loop() { const m = mouse(); me.x += (m.x - me.x) * 0.06; me.y += (m.y - me.y) * 0.06; me.x = Math.max(me.r, Math.min(W - me.r, me.x)); me.y = Math.max(me.r, Math.min(H - me.r, me.y)); for (let i = foods.length - 1; i >= 0; i--) { const f = foods[i]; if (Math.hypot(f.x - me.x, f.y - me.y) < me.r + f.r) { foods.splice(i, 1); me.r = Math.min(40, me.r + 0.6); score += 1; } } for (const b of blobs) { b.x += b.vx; b.y += b.vy; if (b.x < 0 || b.x > W) b.vx *= -1; if (b.y < 0 || b.y > H) b.vy *= -1; const d = Math.hypot(b.x - me.x, b.y - me.y); if (d < me.r + b.r) { if (me.r > b.r) { me.r = Math.min(50, me.r + 1); score += 5; b.x = rand(0, W); b.y = rand(0, H); b.r = rand(10, 22); } else { scoreEl.textContent = "Eaten!"; return; } } } if (foods.length < 30) foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); foods.forEach(f => { ctx.fillStyle = "#34d399"; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); }); blobs.forEach(b => { ctx.fillStyle = b.c; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); }); ctx.fillStyle = CFG.accent; ctx.beginPath(); ctx.arc(me.x, me.y, me.r, 0, 7); ctx.fill(); requestAnimationFrame(loop); }
   function mouse() { const r = canvas.getBoundingClientRect(); return { x: (pm.x - r.left) / r.width * W, y: (pm.y - r.top) / r.height * H }; }
   const pm = { x: W / 2, y: H / 2 }; canvas.addEventListener("mousemove", e => { pm.x = e.clientX; pm.y = e.clientY; }); canvas.addEventListener("touchmove", e => { pm.x = e.touches[0].clientX; pm.y = e.touches[0].clientY; }, { passive: true });
@@ -84,7 +84,7 @@ ENGINES.match3 = function (g) {
 ENGINES.spaceshooter = function (g) {
   const W = g.w, H = g.h; let ship, bullets, enemies, score, over;
   function init() { ship = { x: W / 2, y: H - 40 }; bullets = []; enemies = []; score = 0; over = false; scoreEl.textContent = 0; }
-  function loop() { if (over) return; if (chance(0.04)) enemies.push({ x: rand(10, W - 10), y: -10, vy: rand(1.2, 2.6) }); bullets = bullets.filter(b => { b.y -= 6; return b.y > -10; }); enemies = enemies.filter(en => { en.y += en.vy; const hit = bullets.some(b => Math.abs(b.x - en.x) < 12 && Math.abs(b.y - en.y) < 12); if (hit) score += 10; return !hit && en.y < H + 10; }); if (enemies.some(en => en.y > H - 20)) over = true; scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(ship.x - 12, ship.y - 12, 24, 24, 6); ctx.fill(); ctx.fillStyle = "#fbbf24"; bullets.forEach(b => { rr(b.x - 2, b.y - 8, 4, 12, 2); ctx.fill(); }); enemies.forEach(en => { ctx.fillStyle = "#f43f5e"; rr(en.x - 10, en.y - 10, 20, 20, 6); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function loop() { if (over) return; if (chance(0.03)) enemies.push({ x: rand(10, W - 10), y: -10, vy: rand(1.0, 1.7) }); bullets = bullets.filter(b => { b.y -= 7; return b.y > -10; }); enemies = enemies.filter(en => { en.y += en.vy; const hit = bullets.some(b => Math.abs(b.x - en.x) < 12 && Math.abs(b.y - en.y) < 12); if (hit) score += 10; return !hit && en.y < H + 10; }); if (enemies.some(en => en.y > H - 20)) over = true; scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(ship.x - 12, ship.y - 12, 24, 24, 6); ctx.fill(); ctx.fillStyle = "#fbbf24"; bullets.forEach(b => { rr(b.x - 2, b.y - 8, 4, 12, 2); ctx.fill(); }); enemies.forEach(en => { ctx.fillStyle = "#f43f5e"; rr(en.x - 10, en.y - 10, 20, 20, 6); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
   addEventListener("keydown", e => { if (e.key === "ArrowLeft") ship.x = Math.max(12, ship.x - 14); if (e.key === "ArrowRight") ship.x = Math.min(W - 12, ship.x + 14); if (e.key === " ") bullets.push({ x: ship.x, y: ship.y - 14 }); });
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); ship.x = (e.clientX - r.left) / r.width * W; }); canvas.addEventListener("click", () => bullets.push({ x: ship.x, y: ship.y - 14 }));
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
@@ -92,7 +92,7 @@ ENGINES.spaceshooter = function (g) {
 
 ENGINES.jump = function (g) {
   const W = g.w, H = g.h; let p, plats, vy, score, over;
-  function init() { p = { x: W / 2, y: H - 60 }; vy = 0; plats = []; for (let i = 0; i < 8; i++)plats.push({ x: rand(0, W - 50), y: H - i * 70, w: 50 }); score = 0; over = false; }
+  function init() { p = { x: W / 2, y: H - 24 }; vy = 0; plats = []; for (let i = 0; i < 8; i++)plats.push({ x: i === 0 ? W / 2 - 25 : rand(0, W - 50), y: H - i * 70, w: 50 }); score = 0; over = false; }
   function loop() { if (over) return; vy += 0.5; p.y += vy; if (p.y < H / 2) { p.y = H / 2; plats.forEach(pl => pl.y -= vy ? 0 : 0); plats = plats.map(pl => ({ ...pl, y: pl.y + 3 })).filter(pl => pl.y < H + 20); while (plats.length < 8)plats.push({ x: rand(0, W - 50), y: plats[plats.length - 1].y - 70, w: 50 }); } const on = plats.find(pl => p.x + 14 > pl.x && p.x - 14 < pl.x + pl.w && Math.abs((p.y + 24) - pl.y) < 8 && vy > 0); if (on) { vy = -9; score += 1; scoreEl.textContent = score; } if (p.y > H) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); plats.forEach(pl => { ctx.fillStyle = "#34d399"; rr(pl.x, pl.y, pl.w, 12, 5); ctx.fill(); }); ctx.fillStyle = CFG.accent; rr(p.x - 14, p.y - 24, 28, 28, 8); ctx.fill(); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
   addEventListener("keydown", e => { if (e.key === "ArrowLeft") p.x -= 22; if (e.key === "ArrowRight") p.x += 22; });
   canvas.addEventListener("touchstart", e => { const x = e.touches[0].clientX; p.x = x < innerWidth / 2 ? Math.max(14, p.x - 22) : Math.min(W - 14, p.x + 22); }, { passive: true });
@@ -102,7 +102,7 @@ ENGINES.jump = function (g) {
 ENGINES.racing = function (g) {
   const W = g.w, H = g.h; let car, road, enemies, score, over, spd;
   function init() { car = { x: W / 2, y: H - 60 }; enemies = []; score = 0; over = false; spd = 4; }
-  function loop() { if (over) return; spd = 4 + score * 0.05; if (chance(0.04)) enemies.push({ x: ((Math.random() * 4) | 0) * (W / 4) + 20, y: -40 }); enemies = enemies.map(e => ({ ...e, y: e.y + spd })); enemies = enemies.filter(e => e.y < H + 40); score += 1; scoreEl.textContent = (score / 10 | 0); if (enemies.some(e => Math.abs(e.x - car.x) < 30 && Math.abs(e.y - car.y) < 40)) over = true; ctx.fillStyle = "#1a1a2e"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#3a3a5c"; for (let i = 0; i < 5; i++)ctx.fillRect(W / 2 - 2, (i * 80 + (score % 80)) % H, 4, 40); ctx.fillStyle = CFG.accent; rr(car.x - 14, car.y - 22, 28, 44, 6); ctx.fill(); ctx.fillStyle = "#f43f5e"; enemies.forEach(e => { rr(e.x - 14, e.y - 22, 28, 44, 6); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Crash!", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function loop() { if (over) return; spd = 2.4 + score * 0.025; if (chance(0.035)) enemies.push({ x: ((Math.random() * 4) | 0) * (W / 4) + 20, y: -40 }); enemies = enemies.map(e => ({ ...e, y: e.y + spd })); enemies = enemies.filter(e => e.y < H + 40); score += 1; scoreEl.textContent = (score / 10 | 0); if (enemies.some(e => Math.abs(e.x - car.x) < 30 && Math.abs(e.y - car.y) < 40)) over = true; ctx.fillStyle = "#1a1a2e"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#3a3a5c"; for (let i = 0; i < 5; i++)ctx.fillRect(W / 2 - 2, (i * 80 + (score % 80)) % H, 4, 40); ctx.fillStyle = CFG.accent; rr(car.x - 14, car.y - 22, 28, 44, 6); ctx.fill(); ctx.fillStyle = "#f43f5e"; enemies.forEach(e => { rr(e.x - 14, e.y - 22, 28, 44, 6); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Crash!", W / 2, H / 2); } requestAnimationFrame(loop); }
   addEventListener("keydown", e => { if (e.key === "ArrowLeft") car.x -= 24; if (e.key === "ArrowRight") car.x += 24; });
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); car.x = (e.clientX - r.left) / r.width * W; });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
@@ -181,7 +181,7 @@ ENGINES.coloring = function (g) {
 ENGINES.rhythm = function (g) {
   const W = g.w, H = g.h; let notes, score, over, t;
   function init() { notes = []; score = 0; over = false; t = 0; }
-  function loop() { t++; if (over) return; if (t % 50 === 0) notes.push({ x: rand(40, W - 40), y: -10, hit: false }); notes = notes.map(n => ({ ...n, y: n.y + 3 })); notes.forEach(n => { if (n.y > H - 30 && !n.hit) over = true; }); notes = notes.filter(n => n.y < H + 20); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#34d399"; ctx.fillRect(W / 2 - 30, H - 30, 60, 12); notes.forEach(n => { ctx.fillStyle = n.hit ? "#34d399" : CFG.accent; ctx.beginPath(); ctx.arc(n.x, n.y, 12, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Missed!", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function loop() { t++; if (over) return; if (t % 60 === 0) notes.push({ x: rand(40, W - 40), y: -10, hit: false }); notes = notes.map(n => ({ ...n, y: n.y + 2.4 })); notes.forEach(n => { if (n.y > H - 30 && !n.hit) over = true; }); notes = notes.filter(n => n.y < H + 20); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#34d399"; ctx.fillRect(W / 2 - 30, H - 30, 60, 12); notes.forEach(n => { ctx.fillStyle = n.hit ? "#34d399" : CFG.accent; ctx.beginPath(); ctx.arc(n.x, n.y, 12, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Missed!", W / 2, H / 2); } requestAnimationFrame(loop); }
   canvas.addEventListener("click", e => { const rect = canvas.getBoundingClientRect(); const x = (e.clientX - rect.left) / rect.width * W; notes.forEach(n => { if (Math.abs(n.x - x) < 40 && Math.abs(n.y - (H - 24)) < 40 && !n.hit) { n.hit = true; score += 1; } }); });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
 };
@@ -204,8 +204,8 @@ ENGINES.path = function (g) {
 
 ENGINES.pinball = function (g) {
   const W = g.w, H = g.h; let ball, paddle, score, over;
-  function init() { ball = { x: W / 2, y: 60, vx: 2, vy: 2 }; paddle = { x: W / 2, w: 80 }; score = 0; over = false; scoreEl.textContent = 0; }
-  function loop() { if (over) return; ball.vy += 0.12; ball.x += ball.vx; ball.y += ball.vy; if (ball.x < 8 || ball.x > W - 8) ball.vx *= -1; if (ball.y < 8) ball.vy *= -1; if (ball.y > H - 14 && ball.x > paddle.x - paddle.w / 2 && ball.x < paddle.x + paddle.w / 2) { ball.vy = -Math.abs(ball.vy); score += 1; scoreEl.textContent = score; } if (ball.y > H) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(paddle.x - paddle.w / 2, H - 12, paddle.w, 10, 5); ctx.fill(); ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 8, 0, 7); ctx.fill(); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function init() { ball = { x: W / 2, y: 60, vx: 1.5, vy: 1.5 }; paddle = { x: W / 2, w: 80 }; score = 0; over = false; scoreEl.textContent = 0; }
+  function loop() { if (over) return; ball.vy += 0.1; ball.x += ball.vx; ball.y += ball.vy; if (ball.x < 8 || ball.x > W - 8) ball.vx *= -1; if (ball.y < 8) ball.vy *= -1; if (ball.y > H - 14 && ball.x > paddle.x - paddle.w / 2 && ball.x < paddle.x + paddle.w / 2) { ball.vy = -Math.abs(ball.vy); score += 1; scoreEl.textContent = score; } if (ball.y > H) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(paddle.x - paddle.w / 2, H - 12, paddle.w, 10, 5); ctx.fill(); ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 8, 0, 7); ctx.fill(); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); paddle.x = (e.clientX - r.left) / r.width * W; });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
 };
@@ -238,7 +238,7 @@ ENGINES.tetris = function (g) {
 ENGINES.fruitslice = function (g) {
   const W = g.w, H = g.h; let fruits, score, over, sl;
   function init() { fruits = []; score = 0; over = false; sl = []; }
-  function loop() { if (over) return; if (chance(0.05)) fruits.push({ x: rand(20, W - 20), y: H + 10, vy: rand(-11, -8), r: rand(14, 22), cut: false }); fruits = fruits.map(f => ({ ...f, y: f.y + f.vy, vy: f.vy + 0.3 })); fruits.forEach(f => { if (f.y > H + 30 && !f.cut) over = true; }); fruits = fruits.filter(f => f.y < H + 40); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 3; ctx.beginPath(); sl.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); fruits.forEach(f => { ctx.fillStyle = f.cut ? "#34d399" : CFG.accent; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Missed!", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function loop() { if (over) return; if (chance(0.04)) fruits.push({ x: rand(20, W - 20), y: H + 10, vy: rand(-10, -7), r: rand(14, 22), cut: false }); fruits = fruits.map(f => ({ ...f, y: f.y + f.vy, vy: f.vy + 0.3 })); fruits.forEach(f => { if (f.y > H + 30 && !f.cut) over = true; }); fruits = fruits.filter(f => f.y < H + 40); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 3; ctx.beginPath(); sl.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); fruits.forEach(f => { ctx.fillStyle = f.cut ? "#34d399" : CFG.accent; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Missed!", W / 2, H / 2); } requestAnimationFrame(loop); }
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H; sl.push({ x, y }); if (sl.length > 8) sl.shift(); fruits.forEach(f => { if (Math.hypot(f.x - x, f.y - y) < f.r + 6 && !f.cut) { f.cut = true; score += 1; } }); });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
 };
@@ -246,7 +246,7 @@ ENGINES.fruitslice = function (g) {
 ENGINES.dodge = function (g) {
   const W = g.w, H = g.h; let ship, rocks, score, over;
   function init() { ship = { x: W / 2, y: H - 50 }; rocks = []; score = 0; over = false; scoreEl.textContent = 0; }
-  function loop() { if (over) return; if (chance(0.06)) rocks.push({ x: rand(10, W - 10), y: -10, vy: rand(2, 4), r: rand(10, 22) }); rocks = rocks.map(r => ({ ...r, y: r.y + r.vy })); rocks = rocks.filter(r => r.y < H + 30); score += 1; scoreEl.textContent = (score / 10 | 0); if (rocks.some(r => Math.hypot(r.x - ship.x, r.y - ship.y) < r.r + 12)) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; ctx.beginPath(); ctx.moveTo(ship.x, ship.y - 14); ctx.lineTo(ship.x - 12, ship.y + 12); ctx.lineTo(ship.x + 12, ship.y + 12); ctx.closePath(); ctx.fill(); rocks.forEach(r => { ctx.fillStyle = "#8b8ba7"; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function loop() { if (over) return; if (chance(0.05)) rocks.push({ x: rand(10, W - 10), y: -10, vy: rand(1.6, 2.6), r: rand(10, 22) }); rocks = rocks.map(r => ({ ...r, y: r.y + r.vy })); rocks = rocks.filter(r => r.y < H + 30); score += 1; scoreEl.textContent = (score / 10 | 0); if (rocks.some(r => Math.hypot(r.x - ship.x, r.y - ship.y) < r.r + 12)) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; ctx.beginPath(); ctx.moveTo(ship.x, ship.y - 14); ctx.lineTo(ship.x - 12, ship.y + 12); ctx.lineTo(ship.x + 12, ship.y + 12); ctx.closePath(); ctx.fill(); rocks.forEach(r => { ctx.fillStyle = "#8b8ba7"; ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); ship.x = (e.clientX - r.left) / r.width * W; });
   addEventListener("keydown", e => { if (e.key === "ArrowLeft") ship.x -= 20; if (e.key === "ArrowRight") ship.x += 20; });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
@@ -255,7 +255,7 @@ ENGINES.dodge = function (g) {
 ENGINES.zombie = function (g) {
   const W = g.w, H = g.h; let player, zombies, bullets, score, over;
   function init() { player = { x: W / 2, y: H - 50 }; zombies = []; bullets = []; score = 0; over = false; scoreEl.textContent = 0; }
-  function loop() { if (over) return; if (chance(0.03)) zombies.push({ x: rand(20, W - 20), y: -10, vy: rand(0.8, 1.8) }); bullets = bullets.filter(b => { b.y -= 7; return b.y > -10; }); zombies = zombies.map(z => ({ ...z, y: z.y + z.vy })); zombies = zombies.filter(z => { const hit = bullets.some(b => Math.hypot(b.x - z.x, b.y - z.y) < 14); if (hit) score += 1; return !hit && z.y < H + 20; }); if (zombies.some(z => z.y > H - 40)) over = true; scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(player.x - 12, player.y - 16, 24, 32, 6); ctx.fill(); ctx.fillStyle = "#34d399"; bullets.forEach(b => { rr(b.x - 2, b.y - 8, 4, 12, 2); ctx.fill(); }); zombies.forEach(z => { ctx.fillStyle = "#22c55e"; ctx.beginPath(); ctx.arc(z.x, z.y, 12, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Overrun!", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function loop() { if (over) return; if (chance(0.025)) zombies.push({ x: rand(20, W - 20), y: -10, vy: rand(0.7, 1.3) }); bullets = bullets.filter(b => { b.y -= 7; return b.y > -10; }); zombies = zombies.map(z => ({ ...z, y: z.y + z.vy })); zombies = zombies.filter(z => { const hit = bullets.some(b => Math.hypot(b.x - z.x, b.y - z.y) < 14); if (hit) score += 1; return !hit && z.y < H + 20; }); if (zombies.some(z => z.y > H - 40)) over = true; scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(player.x - 12, player.y - 16, 24, 32, 6); ctx.fill(); ctx.fillStyle = "#34d399"; bullets.forEach(b => { rr(b.x - 2, b.y - 8, 4, 12, 2); ctx.fill(); }); zombies.forEach(z => { ctx.fillStyle = "#22c55e"; ctx.beginPath(); ctx.arc(z.x, z.y, 12, 0, 7); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Overrun!", W / 2, H / 2); } requestAnimationFrame(loop); }
   function shoot() { bullets.push({ x: player.x, y: player.y - 16 }); }
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); player.x = (e.clientX - r.left) / r.width * W; }); canvas.addEventListener("click", shoot);
   addEventListener("keydown", e => { if (e.key === " ") shoot(); if (e.key === "ArrowLeft") player.x -= 18; if (e.key === "ArrowRight") player.x += 18; });
@@ -350,14 +350,58 @@ function buildHTML(g) {
   const w = g.w || 480, h = g.h || 480;
   const p = pal(g.accent);
   const engineSrc = ENGINES[g.mechanic].toString();
-  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />\n<title>${g.title}</title>\n<style>\n:root{--bg:${p.bg};--fg:${p.fg};--accent:${p.accent};--muted:${p.muted};--surface:${p.surface}}\n*{box-sizing:border-box;margin:0;padding:0}\nhtml,body{height:100%}\nbody{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}\nh1{font-size:20px;letter-spacing:.04em}\n.wrap{width:min(92vw,${w}px)}\n.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}\n.score{background:${p.surface};border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}\ncanvas{width:100%;background:${p.surface};border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}\n.hint{color:var(--muted);font-size:13px;text-align:center}\nbutton{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}\n</style>\n</head>\n<body>\n<div class="wrap">\n<div class="bar"><h1>${g.title}</h1><div class="score">Score: <span id="score">0</span></div></div>\n<canvas id="c" width="${w}" height="${h}"></canvas>\n<div class="hint">${g.tagline || ""}</div>\n<div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>\n</div>\n<script>\nconst CFG=${JSON.stringify({ accent: g.accent, size: g.size, tubes: g.tubes, cols: g.cols, bots: g.bots, words: g.words, speed: g.speed, w: g.w, h: g.h })};
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>${g.title}</title>
+<style>
+:root{--bg:${p.bg};--fg:${p.fg};--accent:${p.accent};--muted:${p.muted};--surface:${p.surface}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}
+h1{font-size:20px;letter-spacing:.04em}
+.wrap{width:min(94vw,480px);position:relative;margin:0 auto}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px}
+.score{background:${p.surface};border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700;white-space:nowrap}
+.btn{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:14px}
+.stage{position:relative;width:100%}
+canvas{width:100%;height:auto;aspect-ratio:1/1;background:${p.surface};border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
+.hint{color:var(--muted);font-size:13px;text-align:center}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(8,8,20,.84);color:var(--fg);font-size:26px;font-weight:800;cursor:pointer;z-index:5;border-radius:14px;text-align:center;padding:16px}
+.overlay small{font-size:14px;font-weight:600;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="bar"><h1>${g.title}</h1><div class="score">Score: <span id="score">0</span></div><button id="restartTop" class="btn">↻ Restart</button></div>
+<div class="stage">
+<canvas id="c" width="${w}" height="${h}"></canvas>
+<div id="start" class="overlay">▶ Tap to Play<small>click or tap to start</small></div>
+</div>
+<div class="hint">${g.tagline || ""}</div>
+<div style="text-align:center;margin-top:10px"><button id="restart" class="btn">New Game</button></div>
+</div>
+<script>
+const CFG=${JSON.stringify({ accent: g.accent, size: g.size, tubes: g.tubes, cols: g.cols, bots: g.bots, words: g.words, speed: g.speed, w: g.w, h: g.h })};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
 const engine = ${engineSrc};
-engine(CFG);
-</script>\n</body>\n</html>\n`;
+let __started=false;
+const __startEl=document.getElementById('start');
+const __restartTop=document.getElementById('restartTop');
+function __begin(){ if(__started)return; __started=true; if(__startEl)__startEl.style.display='none'; engine(CFG); }
+if(__startEl)__startEl.addEventListener('click',__begin);
+if(__restartTop)__restartTop.addEventListener('click',()=>{ const r=document.getElementById('restart'); if(r)r.click(); });
+canvas.addEventListener('touchmove',e=>{const t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:t.clientX,clientY:t.clientY,bubbles:true}));},{passive:true});
+canvas.addEventListener('touchstart',e=>{const t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:t.clientX,clientY:t.clientY,bubbles:true}));},{passive:true});
+</script>
+</body>
+</html>
+`;
 }
 
 // ---------- safe write with retries (Windows EPERM on overwrite is transient) ----------
@@ -420,21 +464,53 @@ function runVerify() {
       get() { return () => { calls.any++; }; },
       set() { return true; },
     });
-    const listeners = {};
-    const makeEl = () => ({ getContext: () => ctx, addEventListener: (e, f) => { listeners[e] = f; }, insertAdjacentHTML: () => {}, appendChild: () => {}, textContent: "", style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 480, height: 480 }), width: 480, height: 480 });
-    const canvas = makeEl();
-    globalThis.document = { getElementById: (id) => (id === "c" ? canvas : makeEl()), createElement: () => makeEl(), querySelector: () => makeEl(), body: makeEl() };
-    globalThis.addEventListener = (e, f) => { listeners[e] = f; };
+    globalThis.MouseEvent = class { constructor(type, init) { this.type = type; Object.assign(this, init || {}); } };
+    globalThis.performance = globalThis.performance || { now: () => Date.now() };
+    const registry = {};
+    function mkEl(id) {
+      const el = {
+        id,
+        _L: {},
+        style: {},
+        textContent: "",
+        width: 480,
+        height: 480,
+        getContext: () => ctx,
+        addEventListener: (e, f) => { (el._L[e] = el._L[e] || []).push(f); },
+        removeEventListener: () => {},
+        click: () => { (el._L.click || []).forEach((f) => { try { f({ preventDefault() {} }); } catch (_) {} }); },
+        dispatchEvent: (evt) => { (el._L[evt.type] || []).forEach((f) => { try { f(evt); } catch (_) {} }); return true; },
+        insertAdjacentHTML: () => {},
+        appendChild: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 480, height: 480 }),
+      };
+      return el;
+    }
+    globalThis.document = {
+      getElementById: (id) => (registry[id] = registry[id] || mkEl(id)),
+      createElement: () => mkEl("el"),
+      querySelector: () => mkEl("q"),
+      addEventListener: (e, f) => { (registry.__doc_L = registry.__doc_L || {}), (registry.__doc_L[e] = registry.__doc_L[e] || []).push(f); },
+      body: mkEl("body"),
+    };
+    const winListeners = {};
+    globalThis.addEventListener = (e, f) => { (winListeners[e] = winListeners[e] || []).push(f); };
     globalThis.setTimeout = () => 0;
-    let rafQueue = [];
+    globalThis.setInterval = () => 0;
+    globalThis.clearInterval = () => {};
+    globalThis.clearTimeout = () => {};
+    const rafQueue = [];
     globalThis.requestAnimationFrame = (fn) => { rafQueue.push(fn); return 0; };
     globalThis.window = globalThis;
     try {
       (0, eval)(script);
-      if (listeners.keydown) { listeners.keydown({ key: "ArrowLeft", preventDefault() {} }); listeners.keydown({ key: "ArrowUp", preventDefault() {} }); }
-      for (let f = 0; f < 6 && rafQueue.length; f++) { const fn = rafQueue.shift(); try { fn(); } catch (_) {} }
+      // Engines only start after the "Tap to Play" overlay (#start) is clicked.
+      const startEl = registry.start;
+      if (startEl && startEl.click) startEl.click();
+      if (winListeners.keydown) winListeners.keydown.forEach((f) => { try { f({ key: "ArrowLeft", preventDefault() {} }); f({ key: "ArrowUp", preventDefault() {} }); } catch (_) {} });
+      for (let f = 0; f < 12 && rafQueue.length; f++) { const fn = rafQueue.shift(); try { fn(); } catch (_) {} }
       const drew = calls.any;
-      results.push({ slug: g.slug, ok: drew > 0, drew, err: drew > 0 ? "" : "no draw calls" });
+      results.push({ slug: g.slug, ok: drew > 0, drew, err: drew > 0 ? "" : "no draw calls (engine never started or never drew)" });
     } catch (e) {
       results.push({ slug: g.slug, ok: false, drew: 0, err: String((e && e.message) || e).split("\n")[0] });
     }

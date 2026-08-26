@@ -10,20 +10,26 @@
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}
 h1{font-size:20px;letter-spacing:.04em}
-.wrap{width:min(92vw,480px)}
-.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.score{background:#16162a;border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}
-canvas{width:100%;background:#16162a;border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
+.wrap{width:min(94vw,480px);position:relative;margin:0 auto}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px}
+.score{background:#16162a;border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700;white-space:nowrap}
+.btn{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:14px}
+.stage{position:relative;width:100%}
+canvas{width:100%;height:auto;aspect-ratio:1/1;background:#16162a;border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
 .hint{color:var(--muted);font-size:13px;text-align:center}
-button{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(8,8,20,.84);color:var(--fg);font-size:26px;font-weight:800;cursor:pointer;z-index:5;border-radius:14px;text-align:center;padding:16px}
+.overlay small{font-size:14px;font-weight:600;color:var(--muted)}
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="bar"><h1>Space Shooter</h1><div class="score">Score: <span id="score">0</span></div></div>
+<div class="bar"><h1>Space Shooter</h1><div class="score">Score: <span id="score">0</span></div><button id="restartTop" class="btn">↻ Restart</button></div>
+<div class="stage">
 <canvas id="c" width="480" height="480"></canvas>
+<div id="start" class="overlay">▶ Tap to Play<small>click or tap to start</small></div>
+</div>
 <div class="hint">Defend the galaxy one blast at a time.</div>
-<div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
+<div style="text-align:center;margin-top:10px"><button id="restart" class="btn">New Game</button></div>
 </div>
 <script>
 const CFG={"accent":"#22d3ee","w":480,"h":480};
@@ -34,12 +40,19 @@ function chance(p){return Math.random()<p;}
 const engine = function (g) {
   const W = g.w, H = g.h; let ship, bullets, enemies, score, over;
   function init() { ship = { x: W / 2, y: H - 40 }; bullets = []; enemies = []; score = 0; over = false; scoreEl.textContent = 0; }
-  function loop() { if (over) return; if (chance(0.04)) enemies.push({ x: rand(10, W - 10), y: -10, vy: rand(1.2, 2.6) }); bullets = bullets.filter(b => { b.y -= 6; return b.y > -10; }); enemies = enemies.filter(en => { en.y += en.vy; const hit = bullets.some(b => Math.abs(b.x - en.x) < 12 && Math.abs(b.y - en.y) < 12); if (hit) score += 10; return !hit && en.y < H + 10; }); if (enemies.some(en => en.y > H - 20)) over = true; scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(ship.x - 12, ship.y - 12, 24, 24, 6); ctx.fill(); ctx.fillStyle = "#fbbf24"; bullets.forEach(b => { rr(b.x - 2, b.y - 8, 4, 12, 2); ctx.fill(); }); enemies.forEach(en => { ctx.fillStyle = "#f43f5e"; rr(en.x - 10, en.y - 10, 20, 20, 6); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
+  function loop() { if (over) return; if (chance(0.03)) enemies.push({ x: rand(10, W - 10), y: -10, vy: rand(1.0, 1.7) }); bullets = bullets.filter(b => { b.y -= 7; return b.y > -10; }); enemies = enemies.filter(en => { en.y += en.vy; const hit = bullets.some(b => Math.abs(b.x - en.x) < 12 && Math.abs(b.y - en.y) < 12); if (hit) score += 10; return !hit && en.y < H + 10; }); if (enemies.some(en => en.y > H - 20)) over = true; scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(ship.x - 12, ship.y - 12, 24, 24, 6); ctx.fill(); ctx.fillStyle = "#fbbf24"; bullets.forEach(b => { rr(b.x - 2, b.y - 8, 4, 12, 2); ctx.fill(); }); enemies.forEach(en => { ctx.fillStyle = "#f43f5e"; rr(en.x - 10, en.y - 10, 20, 20, 6); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
   addEventListener("keydown", e => { if (e.key === "ArrowLeft") ship.x = Math.max(12, ship.x - 14); if (e.key === "ArrowRight") ship.x = Math.min(W - 12, ship.x + 14); if (e.key === " ") bullets.push({ x: ship.x, y: ship.y - 14 }); });
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); ship.x = (e.clientX - r.left) / r.width * W; }); canvas.addEventListener("click", () => bullets.push({ x: ship.x, y: ship.y - 14 }));
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
 };
-engine(CFG);
+let __started=false;
+const __startEl=document.getElementById('start');
+const __restartTop=document.getElementById('restartTop');
+function __begin(){ if(__started)return; __started=true; if(__startEl)__startEl.style.display='none'; engine(CFG); }
+if(__startEl)__startEl.addEventListener('click',__begin);
+if(__restartTop)__restartTop.addEventListener('click',()=>{ const r=document.getElementById('restart'); if(r)r.click(); });
+canvas.addEventListener('touchmove',e=>{const t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:t.clientX,clientY:t.clientY,bubbles:true}));},{passive:true});
+canvas.addEventListener('touchstart',e=>{const t=e.touches[0];canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:t.clientX,clientY:t.clientY,bubbles:true}));},{passive:true});
 </script>
 </body>
 </html>

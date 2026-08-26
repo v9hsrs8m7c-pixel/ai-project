@@ -13,8 +13,9 @@ import type { Game } from "@/config/types";
 // Badges:
 //   real:true            -> "Verified Publisher" (green) — live DGI embed
 //   MOCK token           -> "Demo · mock data"  (accent) — non-live mock catalog
-//   source:selfhosted    -> "Self-hosted · original" (accent) — our own game
-//   none of the above    -> none
+//   self-hosted games    -> NO badge (they are our own original assets; keeping the
+//                           page chrome minimal avoids the "Self-hosted" label the user
+//                           flagged as unwanted)
 
 const MOCK_MARKER = "MOCK";
 
@@ -52,7 +53,7 @@ export function GameEmbed({
       <div
         className="relative w-full overflow-hidden rounded-3xl"
         style={{
-          aspectRatio: "16 / 9",
+          aspectRatio: "1 / 1",
           background: "var(--color-surface)",
           borderColor: "color-mix(in srgb, var(--color-text) 10%, transparent)",
           borderWidth: 1,
@@ -96,13 +97,6 @@ export function GameEmbed({
             style={{ background: "var(--color-accent)", color: "#0b0b14" }}
           >
             Demo · mock data
-          </span>
-        ) : isSelfHosted ? (
-          <span
-            className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-            style={{ background: "var(--color-accent)", color: "#0b0b14" }}
-          >
-            Self-hosted · original
           </span>
         ) : null}
       </div>
