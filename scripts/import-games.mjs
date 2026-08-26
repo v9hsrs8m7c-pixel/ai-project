@@ -17,14 +17,16 @@ const ROOT = join(D, "..");
 const CURATED = [
   { repo: "chaoxucoding/spacebattle", subdir: "", branch: "main", note: "MIT; 单文件太空射击" },
   { repo: "wuhao199368/idle-html", subdir: "", branch: "main", note: "MIT; 多款单文件 idle 点击器" },
-  { repo: "drakeaxelrod/single-html-file-apps", subdir: "", branch: "main", note: "MIT; 含 snake/slots(零依赖), pong 用 Phaser 会被自动跳过" },
+  { repo: "drakeaxelrod/single-html-file-apps", subdir: "", branch: "main", note: "MIT; snake/slots/wishly 依赖公共CDN(jsdelivr/unpkg), pong 零依赖" },
 ];
 
-// 命中即跳过: 该 HTML 引用了外部依赖, iframe 加载会缺资源。
-const EXTERNAL = [
-  /cdn\./i, /unpkg\.com/i, /jsdelivr/i, /googleapis\.com/i, /google\.com\/fonts/i,
-  /<script[^>]+src=["']https?:/i, /phaser|three\.?js|cdn\.jsdelivr/i,
-];
+// 仅当引用了"本地/相对路径"的脚本或样式时才跳过——这类文件我们不会下载,
+// iframe 里会 404 导致游戏损坏。公共 CDN(https://jsdelivr/unpkg/cdnjs/googleapis)
+// 浏览器可直连, 接受; 内联 @import 字体亦接受(仅 cosmetic)。
+function hasLocalDep(html) {
+  return /<script[^>]+src=["'](?!https?:\/\/|data:)[^"']*["']/i.test(html)
+      || /<link[^>]+href=["'](?!https?:\/\/|data:)[^"']*\.(?:js|css)["']/i.test(html);
+}
 
 const arg = process.argv[2];
 const targets = arg && arg.includes("/")
@@ -34,7 +36,7 @@ const targets = arg && arg.includes("/")
 let imported = 0, skipped = 0;
 const entries = [];
 
-// 递归收集任意深度的单文件 .html(含外部依赖的会被后续 EXTERNAL 过滤跳过)。
+// 递归收集任意深度的单文件 .html(含本地相对依赖的会被后续 hasLocalDep 过滤跳过)。
 async function collectHtml(repo, branch, path, acc) {
   const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
     headers: { Accept: "application/vnd.github+json", "User-Agent": "darlynmae-importer" },
@@ -59,7 +61,7 @@ for (const t of targets) {
     const raw = await fetch(`https://raw.githubusercontent.com/${repo}/${branch}/${f.path}`);
     if (!raw.ok) { console.warn("  跳过", f.path, raw.status); skipped++; continue; }
     const html = await raw.text();
-    if (EXTERNAL.some((re) => re.test(html))) { console.log("  跳过(含外部依赖)", f.path); skipped++; continue; }
+    if (hasLocalDep(html)) { console.log("  跳过(含本地相对依赖, iframe 会缺资源)", f.path); skipped++; continue; }
     const dir = join(ROOT, "public/games", slug);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "index.html"), html);
