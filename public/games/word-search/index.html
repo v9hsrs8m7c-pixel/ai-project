@@ -26,18 +26,18 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#34d399","words":["GAME","PLAY","FUN","WIN","SKILL","JUMP","STAR"]};
+const CFG={"accent":"#34d399","words":["GAME","PLAY","FUN","WIN","SKILL","JUMP","STAR"],"w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const N = 10, W = g.w, CELL = W / N; const words = g.words || ["GAME", "PLAY", "FUN", "WIN", "SKILL"]; let grid;
   function init() { grid = Array.from({ length: N }, () => Array(N).fill("")); for (const w of words) place(w); for (let r = 0; r < N; r++)for (let c = 0; c < N; c++)if (!grid[r][c]) grid[r][c] = String.fromCharCode(65 + (Math.random() * 26 | 0)); scoreEl.textContent = "Find: " + words.join(" "); }
   function place(w) { for (let t = 0; t < 30; t++) { const dr = (Math.random() * 3 | 0) - 1, dc = (Math.random() * 3 | 0) - 1; if (dr === 0 && dc === 0) continue; let r = Math.random() * N | 0, c = Math.random() * N | 0; let ok2 = true; const pts = []; for (const ch of w) { if (r < 0 || c < 0 || r >= N || c >= N || (grid[r][c] && grid[r][c] !== ch)) { ok2 = false; break; } pts.push([r, c]); r += dr; c += dc; } if (ok2) { pts.forEach((p, i) => grid[p[0]][p[1]] = w[i]); return; } } }
   function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); ctx.font = "600 " + (CELL * 0.55) + "px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; for (let r = 0; r < N; r++)for (let c = 0; c < N; c++) { ctx.fillStyle = CFG.accent; ctx.fillText(grid[r][c], c * CELL + CELL / 2, r * CELL + CELL / 2); } }
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
-}
+};
 engine(CFG);
 </script>
 </body>

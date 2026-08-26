@@ -26,18 +26,18 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#34d399"};
+const CFG={"accent":"#34d399","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const N = 12, W = g.w, CELL = W / N; let cells, palette, pick;
   function init() { cells = Array.from({ length: N }, () => Array(N).fill("#1d1d33")); palette = [CFG.accent, "#f43f5e", "#22d3ee", "#34d399", "#fbbf24", "#a78bfa"]; pick = palette[0]; scoreEl.textContent = "Tap a color then paint"; }
   function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); for (let r = 0; r < N; r++)for (let c = 0; c < N; c++) { ctx.fillStyle = cells[r][c]; ctx.fillRect(c * CELL, r * CELL, CELL, CELL); } for (let i = 0; i < palette.length; i++) { ctx.fillStyle = palette[i]; ctx.fillRect(4 + i * (W / palette.length), W + 2, W / palette.length - 6, 14); } }
   canvas.addEventListener("click", e => { const rect = canvas.getBoundingClientRect(); const x = (e.clientX - rect.left) / rect.width * W, y = (e.clientY - rect.top) / rect.height * (W + 18); if (y > W) { const i = (x / (W / palette.length)) | 0; if (i >= 0 && i < palette.length) pick = palette[i]; } else { const c = (x / CELL) | 0, r = (y / CELL) | 0; if (r >= 0 && r < N && c >= 0 && c < N) cells[r][c] = pick; } draw(); });
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
-}
+};
 engine(CFG);
 </script>
 </body>

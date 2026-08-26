@@ -51,7 +51,7 @@ ENGINES.snake = function (g) {
 
 ENGINES.ioeat = function (g) {
   const W = g.w, H = g.h; let me, foods, blobs, score;
-  function init() { me = { x: W / 2, y: H / 2, r: 14, vx: 0, vy: 0 }; foods = []; blobs = []; for (let i = 0; i < 40; i++)foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); for (let i = 0; i < (g.bots || 6); i++)blobs.push({ x: rand(0, W), y: rand(0, H), r: rand(10, 26), c: "#f43f5e", vx: rand(-1, 1), vy: rand(-1, 1) }); score = 0; }
+  function init() { me = { x: W / 2, y: H / 2, r: 14, vx: 0, vy: 0 }; foods = []; blobs = []; for (let i = 0; i < 40; i++)foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); for (let i = 0; i < (g.bots || 6); i++) { let bx, by; do { bx = rand(0, W); by = rand(0, H); } while (Math.hypot(bx - W / 2, by - H / 2) < 70); blobs.push({ x: bx, y: by, r: rand(10, 26), c: "#f43f5e", vx: rand(-1, 1), vy: rand(-1, 1) }); } score = 0; }
   function loop() { const m = mouse(); me.x += (m.x - me.x) * 0.06; me.y += (m.y - me.y) * 0.06; me.x = Math.max(me.r, Math.min(W - me.r, me.x)); me.y = Math.max(me.r, Math.min(H - me.r, me.y)); for (let i = foods.length - 1; i >= 0; i--) { const f = foods[i]; if (Math.hypot(f.x - me.x, f.y - me.y) < me.r + f.r) { foods.splice(i, 1); me.r = Math.min(40, me.r + 0.6); score += 1; } } for (const b of blobs) { b.x += b.vx; b.y += b.vy; if (b.x < 0 || b.x > W) b.vx *= -1; if (b.y < 0 || b.y > H) b.vy *= -1; const d = Math.hypot(b.x - me.x, b.y - me.y); if (d < me.r + b.r) { if (me.r > b.r) { me.r = Math.min(50, me.r + 1); score += 5; b.x = rand(0, W); b.y = rand(0, H); b.r = rand(10, 22); } else { scoreEl.textContent = "Eaten!"; return; } } } if (foods.length < 30) foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); foods.forEach(f => { ctx.fillStyle = "#34d399"; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); }); blobs.forEach(b => { ctx.fillStyle = b.c; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); }); ctx.fillStyle = CFG.accent; ctx.beginPath(); ctx.arc(me.x, me.y, me.r, 0, 7); ctx.fill(); requestAnimationFrame(loop); }
   function mouse() { const r = canvas.getBoundingClientRect(); return { x: (pm.x - r.left) / r.width * W, y: (pm.y - r.top) / r.height * H }; }
   const pm = { x: W / 2, y: H / 2 }; canvas.addEventListener("mousemove", e => { pm.x = e.clientX; pm.y = e.clientY; }); canvas.addEventListener("touchmove", e => { pm.x = e.touches[0].clientX; pm.y = e.touches[0].clientY; }, { passive: true });
@@ -350,12 +350,12 @@ function buildHTML(g) {
   const w = g.w || 480, h = g.h || 480;
   const p = pal(g.accent);
   const engineSrc = ENGINES[g.mechanic].toString();
-  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />\n<title>${g.title}</title>\n<style>\n:root{--bg:${p.bg};--fg:${p.fg};--accent:${p.accent};--muted:${p.muted};--surface:${p.surface}}\n*{box-sizing:border-box;margin:0;padding:0}\nhtml,body{height:100%}\nbody{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}\nh1{font-size:20px;letter-spacing:.04em}\n.wrap{width:min(92vw,${w}px)}\n.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}\n.score{background:${p.surface};border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}\ncanvas{width:100%;background:${p.surface};border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}\n.hint{color:var(--muted);font-size:13px;text-align:center}\nbutton{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}\n</style>\n</head>\n<body>\n<div class="wrap">\n<div class="bar"><h1>${g.title}</h1><div class="score">Score: <span id="score">0</span></div></div>\n<canvas id="c" width="${w}" height="${h}"></canvas>\n<div class="hint">${g.tagline || ""}</div>\n<div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>\n</div>\n<script>\nconst CFG=${JSON.stringify({ accent: g.accent, size: g.size, tubes: g.tubes, cols: g.cols, bots: g.bots, words: g.words, speed: g.speed })};
+  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8" />\n<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />\n<title>${g.title}</title>\n<style>\n:root{--bg:${p.bg};--fg:${p.fg};--accent:${p.accent};--muted:${p.muted};--surface:${p.surface}}\n*{box-sizing:border-box;margin:0;padding:0}\nhtml,body{height:100%}\nbody{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}\nh1{font-size:20px;letter-spacing:.04em}\n.wrap{width:min(92vw,${w}px)}\n.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}\n.score{background:${p.surface};border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}\ncanvas{width:100%;background:${p.surface};border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}\n.hint{color:var(--muted);font-size:13px;text-align:center}\nbutton{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}\n</style>\n</head>\n<body>\n<div class="wrap">\n<div class="bar"><h1>${g.title}</h1><div class="score">Score: <span id="score">0</span></div></div>\n<canvas id="c" width="${w}" height="${h}"></canvas>\n<div class="hint">${g.tagline || ""}</div>\n<div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>\n</div>\n<script>\nconst CFG=${JSON.stringify({ accent: g.accent, size: g.size, tubes: g.tubes, cols: g.cols, bots: g.bots, words: g.words, speed: g.speed, w: g.w, h: g.h })};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-${engineSrc}
+const engine = ${engineSrc};
 engine(CFG);
 </script>\n</body>\n</html>\n`;
 }
@@ -373,6 +373,7 @@ function safeWrite(path, content) {
   }
 }
 
+function generateAll() {
 // ---------- write html files ----------
 let made = 0;
 if (!process.argv.includes("nohtml")) {
@@ -406,3 +407,43 @@ const entries = newGames.map(g => {
 const batchContent = `import type { Game } from "../../../config/types.ts";\n\n// Self-hosted original HTML5 games (Stage A) — batch 2 (42 new games).\n// Generated by scripts/gen-games.mjs. Merged in src/data/games.ts.\n\nconst BATCH2: Game[] = [\n${entries}\n];\n\nexport function getSelfHostedGamesBatch2(): Game[] {\n  return BATCH2;\n}\n`;
 writeFileSync(`${D}/src/data/sources/selfhosted/games-batch2.ts`, batchContent);
 console.log("games-batch2.ts written with", newGames.length, "new entries");
+}
+
+// ---------- verify mode: execute every game's script in a mocked DOM/canvas ----------
+function runVerify() {
+  const results = [];
+  for (const g of GAMES) {
+    const html = buildHTML(g);
+    const script = html.split("<script>")[1].split("</script>")[0];
+    const calls = { any: 0 };
+    const ctx = new Proxy({}, {
+      get() { return () => { calls.any++; }; },
+      set() { return true; },
+    });
+    const listeners = {};
+    const makeEl = () => ({ getContext: () => ctx, addEventListener: (e, f) => { listeners[e] = f; }, insertAdjacentHTML: () => {}, appendChild: () => {}, textContent: "", style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 480, height: 480 }), width: 480, height: 480 });
+    const canvas = makeEl();
+    globalThis.document = { getElementById: (id) => (id === "c" ? canvas : makeEl()), createElement: () => makeEl(), querySelector: () => makeEl(), body: makeEl() };
+    globalThis.addEventListener = (e, f) => { listeners[e] = f; };
+    globalThis.setTimeout = () => 0;
+    let rafQueue = [];
+    globalThis.requestAnimationFrame = (fn) => { rafQueue.push(fn); return 0; };
+    globalThis.window = globalThis;
+    try {
+      (0, eval)(script);
+      if (listeners.keydown) { listeners.keydown({ key: "ArrowLeft", preventDefault() {} }); listeners.keydown({ key: "ArrowUp", preventDefault() {} }); }
+      for (let f = 0; f < 6 && rafQueue.length; f++) { const fn = rafQueue.shift(); try { fn(); } catch (_) {} }
+      const drew = calls.any;
+      results.push({ slug: g.slug, ok: drew > 0, drew, err: drew > 0 ? "" : "no draw calls" });
+    } catch (e) {
+      results.push({ slug: g.slug, ok: false, drew: 0, err: String((e && e.message) || e).split("\n")[0] });
+    }
+  }
+  const fails = results.filter((r) => !r.ok);
+  for (const r of results) console.log((r.ok ? "PASS" : "FAIL").padEnd(5), r.slug.padEnd(20), "draws=" + r.drew, r.err);
+  console.log(`\n${results.length - fails.length}/${results.length} passed; ${fails.length} failed`);
+  if (fails.length) process.exit(1);
+}
+
+if (process.argv.includes("verify")) runVerify();
+else generateAll();

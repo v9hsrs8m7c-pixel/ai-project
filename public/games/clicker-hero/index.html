@@ -26,12 +26,12 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#f43f5e"};
+const CFG={"accent":"#f43f5e","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const W = g.w, H = g.h; let coins, rate, t;
   function init() { coins = 0; rate = 0; t = 0; }
   function loop() { t++; coins += rate; if (t % 30 === 0) scoreEl.textContent = (coins | 0); ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; ctx.font = "700 30px system-ui"; ctx.textAlign = "center"; ctx.fillText((coins | 0) + " coins", W / 2, H / 2 - 20); ctx.fillStyle = "#8b8ba7"; ctx.font = "16px system-ui"; ctx.fillText("Click to mine · buy auto-miner", W / 2, H / 2 + 16); }
@@ -41,7 +41,7 @@ function (g) {
   let auto = document.createElement("button"); auto.textContent = "Auto +1 (" + (50) + ")"; auto.style.cssText = "background:#34d399;color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer;margin-left:8px";
   document.querySelector(".bar").appendChild(auto); auto.addEventListener("click", () => { if (coins >= 50) { coins -= 50; rate += 1; } });
   init(); loop();
-}
+};
 engine(CFG);
 </script>
 </body>

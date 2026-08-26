@@ -26,18 +26,18 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#a78bfa"};
+const CFG={"accent":"#a78bfa","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const W = g.w, H = g.h; let towers, enemies, money, score, over, t;
   function init() { towers = []; enemies = []; money = 50; score = 0; over = false; t = 0; }
   function loop() { t++; if (over) return; if (t % 90 === 0) enemies.push({ x: 0, y: H / 2, hp: 3, vx: 0.8, vy: 0 }); enemies = enemies.map(e => ({ ...e, x: e.x + e.vx })); enemies.forEach(e => towers.forEach(tw => { if (Math.hypot(tw.x - e.x, tw.y - e.y) < 70 && t % 20 === 0) e.hp -= 1; })); enemies = enemies.filter(e => { if (e.hp <= 0) { money += 5; score += 1; return false; } if (e.x > W) { over = true; } return e.x <= W; }); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#3a3a5c"; ctx.fillRect(0, 0, 6, H); enemies.forEach(e => { ctx.fillStyle = "#f43f5e"; ctx.beginPath(); ctx.arc(e.x, e.y, 10, 0, 7); ctx.fill(); }); towers.forEach(tw => { ctx.fillStyle = CFG.accent; rr(tw.x - 10, tw.y - 10, 20, 20, 5); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Base lost", W / 2, H / 2); } requestAnimationFrame(loop); }
   canvas.addEventListener("click", e => { const r = canvas.getBoundingClientRect(); if (money >= 10) { towers.push({ x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }); money -= 10; } });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
-}
+};
 engine(CFG);
 </script>
 </body>

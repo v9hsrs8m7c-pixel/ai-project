@@ -26,18 +26,18 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#f43f5e"};
+const CFG={"accent":"#f43f5e","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const N = 4, W = g.w, CELL = W / N; const icons = ["🍎", "⭐", "🔥", "💡", "🎮", "🚀", "🌟", "⚡"]; let cards, flipped, matched, score;
   function init() { let v = []; for (let i = 0; i < (N * N) / 2; i++) { v.push(icons[i], icons[i]); } v = v.sort(() => Math.random() - 0.5); cards = v.map(x => ({ v: x, f: false, m: false })); flipped = []; matched = 0; score = 0; scoreEl.textContent = 0; }
   function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); ctx.font = (CELL * 0.5) + "px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; for (let i = 0; i < N * N; i++) { const r = (i / N | 0), c = i % N; const x = c * CELL, y = r * CELL; ctx.fillStyle = cards[i].m || cards[i].f ? "#1d1d33" : "#2a2a44"; rr(x + 4, y + 4, CELL - 8, CELL - 8, 8); ctx.fill(); if (cards[i].m || cards[i].f) ctx.fillText(cards[i].v, x + CELL / 2, y + CELL / 2); } }
   canvas.addEventListener("click", e => { const rect = canvas.getBoundingClientRect(); const c = ((e.clientX - rect.left) / rect.width * W / CELL) | 0; const r = ((e.clientY - rect.top) / rect.height * W / CELL) | 0; const i = r * N + c; if (cards[i].m || cards[i].f || flipped.length === 2) return; cards[i].f = true; flipped.push(i); if (flipped.length === 2) { if (cards[flipped[0]].v === cards[flipped[1]].v) { cards[flipped[0]].m = cards[flipped[1]].m = true; matched += 2; score += 1; scoreEl.textContent = score; flipped = []; } else setTimeout(() => { cards[flipped[0]].f = cards[flipped[1]].f = false; flipped = []; draw(); }, 600); } draw(); });
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
-}
+};
 engine(CFG);
 </script>
 </body>

@@ -26,19 +26,19 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#fbbf24"};
+const CFG={"accent":"#fbbf24","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const W = g.w, H = g.h; let car, road, enemies, score, over, spd;
   function init() { car = { x: W / 2, y: H - 60 }; enemies = []; score = 0; over = false; spd = 4; }
   function loop() { if (over) return; spd = 4 + score * 0.05; if (chance(0.04)) enemies.push({ x: ((Math.random() * 4) | 0) * (W / 4) + 20, y: -40 }); enemies = enemies.map(e => ({ ...e, y: e.y + spd })); enemies = enemies.filter(e => e.y < H + 40); score += 1; scoreEl.textContent = (score / 10 | 0); if (enemies.some(e => Math.abs(e.x - car.x) < 30 && Math.abs(e.y - car.y) < 40)) over = true; ctx.fillStyle = "#1a1a2e"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#3a3a5c"; for (let i = 0; i < 5; i++)ctx.fillRect(W / 2 - 2, (i * 80 + (score % 80)) % H, 4, 40); ctx.fillStyle = CFG.accent; rr(car.x - 14, car.y - 22, 28, 44, 6); ctx.fill(); ctx.fillStyle = "#f43f5e"; enemies.forEach(e => { rr(e.x - 14, e.y - 22, 28, 44, 6); ctx.fill(); }); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Crash!", W / 2, H / 2); } requestAnimationFrame(loop); }
   addEventListener("keydown", e => { if (e.key === "ArrowLeft") car.x -= 24; if (e.key === "ArrowRight") car.x += 24; });
   canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); car.x = (e.clientX - r.left) / r.width * W; });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
-}
+};
 engine(CFG);
 </script>
 </body>

@@ -26,19 +26,19 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#34d399","bots":6};
+const CFG={"accent":"#34d399","bots":6,"w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const W = g.w, H = g.h; let me, foods, blobs, score;
-  function init() { me = { x: W / 2, y: H / 2, r: 14, vx: 0, vy: 0 }; foods = []; blobs = []; for (let i = 0; i < 40; i++)foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); for (let i = 0; i < (g.bots || 6); i++)blobs.push({ x: rand(0, W), y: rand(0, H), r: rand(10, 26), c: "#f43f5e", vx: rand(-1, 1), vy: rand(-1, 1) }); score = 0; }
+  function init() { me = { x: W / 2, y: H / 2, r: 14, vx: 0, vy: 0 }; foods = []; blobs = []; for (let i = 0; i < 40; i++)foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); for (let i = 0; i < (g.bots || 6); i++) { let bx, by; do { bx = rand(0, W); by = rand(0, H); } while (Math.hypot(bx - W / 2, by - H / 2) < 70); blobs.push({ x: bx, y: by, r: rand(10, 26), c: "#f43f5e", vx: rand(-1, 1), vy: rand(-1, 1) }); } score = 0; }
   function loop() { const m = mouse(); me.x += (m.x - me.x) * 0.06; me.y += (m.y - me.y) * 0.06; me.x = Math.max(me.r, Math.min(W - me.r, me.x)); me.y = Math.max(me.r, Math.min(H - me.r, me.y)); for (let i = foods.length - 1; i >= 0; i--) { const f = foods[i]; if (Math.hypot(f.x - me.x, f.y - me.y) < me.r + f.r) { foods.splice(i, 1); me.r = Math.min(40, me.r + 0.6); score += 1; } } for (const b of blobs) { b.x += b.vx; b.y += b.vy; if (b.x < 0 || b.x > W) b.vx *= -1; if (b.y < 0 || b.y > H) b.vy *= -1; const d = Math.hypot(b.x - me.x, b.y - me.y); if (d < me.r + b.r) { if (me.r > b.r) { me.r = Math.min(50, me.r + 1); score += 5; b.x = rand(0, W); b.y = rand(0, H); b.r = rand(10, 22); } else { scoreEl.textContent = "Eaten!"; return; } } } if (foods.length < 30) foods.push({ x: rand(0, W), y: rand(0, H), r: 5 }); scoreEl.textContent = score; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); foods.forEach(f => { ctx.fillStyle = "#34d399"; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.fill(); }); blobs.forEach(b => { ctx.fillStyle = b.c; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); }); ctx.fillStyle = CFG.accent; ctx.beginPath(); ctx.arc(me.x, me.y, me.r, 0, 7); ctx.fill(); requestAnimationFrame(loop); }
   function mouse() { const r = canvas.getBoundingClientRect(); return { x: (pm.x - r.left) / r.width * W, y: (pm.y - r.top) / r.height * H }; }
   const pm = { x: W / 2, y: H / 2 }; canvas.addEventListener("mousemove", e => { pm.x = e.clientX; pm.y = e.clientY; }); canvas.addEventListener("touchmove", e => { pm.x = e.touches[0].clientX; pm.y = e.touches[0].clientY; }, { passive: true });
   document.getElementById("restart").addEventListener("click", init); init(); loop();
-}
+};
 engine(CFG);
 </script>
 </body>

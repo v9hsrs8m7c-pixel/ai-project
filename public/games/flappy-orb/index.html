@@ -26,19 +26,19 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#22d3ee"};
+const CFG={"accent":"#22d3ee","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const W = g.w, H = g.h; let p, plats, vy, score, over;
   function init() { p = { x: W / 2, y: H - 60 }; vy = 0; plats = []; for (let i = 0; i < 8; i++)plats.push({ x: rand(0, W - 50), y: H - i * 70, w: 50 }); score = 0; over = false; }
   function loop() { if (over) return; vy += 0.5; p.y += vy; if (p.y < H / 2) { p.y = H / 2; plats.forEach(pl => pl.y -= vy ? 0 : 0); plats = plats.map(pl => ({ ...pl, y: pl.y + 3 })).filter(pl => pl.y < H + 20); while (plats.length < 8)plats.push({ x: rand(0, W - 50), y: plats[plats.length - 1].y - 70, w: 50 }); } const on = plats.find(pl => p.x + 14 > pl.x && p.x - 14 < pl.x + pl.w && Math.abs((p.y + 24) - pl.y) < 8 && vy > 0); if (on) { vy = -9; score += 1; scoreEl.textContent = score; } if (p.y > H) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); plats.forEach(pl => { ctx.fillStyle = "#34d399"; rr(pl.x, pl.y, pl.w, 12, 5); ctx.fill(); }); ctx.fillStyle = CFG.accent; rr(p.x - 14, p.y - 24, 28, 28, 8); ctx.fill(); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
   addEventListener("keydown", e => { if (e.key === "ArrowLeft") p.x -= 22; if (e.key === "ArrowRight") p.x += 22; });
   canvas.addEventListener("touchstart", e => { const x = e.touches[0].clientX; p.x = x < innerWidth / 2 ? Math.max(14, p.x - 22) : Math.min(W - 14, p.x + 22); }, { passive: true });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
-}
+};
 engine(CFG);
 </script>
 </body>

@@ -26,12 +26,12 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#a78bfa"};
+const CFG={"accent":"#a78bfa","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const W = g.w, H = g.h, S = 20; let snake, dir, food, score, over, timer;
   function init() { snake = [{ x: 10 * S, y: 10 * S }]; dir = { x: S, y: 0 }; food = mk(); score = 0; over = false; scoreEl.textContent = 0; }
   function mk() { return { x: ((Math.random() * (W / S)) | 0) * S, y: ((Math.random() * (H / S)) | 0) * S }; }
@@ -43,7 +43,7 @@ function (g) {
   let sx = 0, sy = 0; canvas.addEventListener("touchstart", e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
   canvas.addEventListener("touchend", e => { const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy; const nx = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? [S, 0] : [-S, 0]) : (dy > 0 ? [0, S] : [0, -S]); if (!(nx[0] === -dir.x && nx[1] === -dir.y)) dir = { x: nx[0], y: nx[1] }; }, { passive: true });
   init(); loop();
-}
+};
 engine(CFG);
 </script>
 </body>

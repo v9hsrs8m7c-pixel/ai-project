@@ -26,12 +26,12 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#22d3ee","tubes":4,"cols":4};
+const CFG={"accent":"#22d3ee","tubes":4,"cols":4,"w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const W = g.w, H = g.h; const TUBES = g.tubes || 4, COLS = g.cols || 4, colors = ["#f43f5e", "#22d3ee", "#34d399", "#fbbf24", "#a78bfa", "#fb7185"];
   let tubes, sel;
   function init() { const pool = []; for (let i = 0; i < TUBES; i++)for (let j = 0; j < COLS; j++)pool.push(colors[i % colors.length]); for (let i = pool.length - 1; i > 0; i--) { const k = (Math.random() * (i + 1)) | 0; [pool[i], pool[k]] = [pool[k], pool[i]]; } tubes = []; for (let i = 0; i < TUBES; i++)tubes.push(pool.slice(i * COLS, i * COLS + COLS)); sel = -1; score = 0; scoreEl.textContent = 0; }
@@ -41,7 +41,7 @@ function (g) {
   function tap(i) { if (sel === -1) { if (top(tubes[i]) !== -1) sel = i; return; } if (sel === i) { sel = -1; return; } const a = top(tubes[sel]), b = top(tubes[i]); if (b === -1 && a !== -1) { for (let j = a; j >= 0; j--)tubes[i][j] = tubes[sel][j]; for (let j = 0; j <= a; j++)tubes[sel][j] = null; sel = -1; score += 1; scoreEl.textContent = score; } else if (a !== -1 && b !== -1 && tubes[sel][a] === tubes[i][b] && b < COLS - 1) { tubes[i][b + 1] = tubes[sel][a]; tubes[sel][a] = null; sel = -1; score += 1; scoreEl.textContent = score; } else sel = -1; draw(); }
   canvas.addEventListener("click", e => { const r = canvas.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * W; const gap = (W - TUBES * 44) / (TUBES + 1); const i = Math.floor((x - gap / 2) / (44 + gap)); if (i >= 0 && i < TUBES) tap(i); });
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
-}
+};
 engine(CFG);
 </script>
 </body>

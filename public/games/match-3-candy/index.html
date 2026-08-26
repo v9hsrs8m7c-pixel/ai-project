@@ -26,12 +26,12 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#f43f5e","size":8};
+const CFG={"accent":"#f43f5e","size":8,"w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const N = g.size || 8, W = g.w, CELL = W / N; const C = ["#f43f5e", "#22d3ee", "#34d399", "#fbbf24", "#a78bfa"];
   let grid, score, sel;
   function init() { grid = []; for (let r = 0; r < N; r++) { grid[r] = []; for (let c = 0; c < N; c++)grid[r][c] = (Math.random() * C.length) | 0; } score = 0; sel = null; scoreEl.textContent = 0; }
@@ -40,7 +40,7 @@ function (g) {
   function tap(c, r) { if (!sel) { sel = { r, c }; } else { if (Math.abs(sel.r - r) + Math.abs(sel.c - c) === 1) { swap(sel, { r, c }); score += 1; scoreEl.textContent = score; } sel = null; } draw(); }
   canvas.addEventListener("click", e => { const rect = canvas.getBoundingClientRect(); const c = ((e.clientX - rect.left) / rect.width * W / CELL) | 0; const r = ((e.clientY - rect.top) / rect.height * W / CELL) | 0; if (r >= 0 && r < N && c >= 0 && c < N) tap(c, r); });
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
-}
+};
 engine(CFG);
 </script>
 </body>

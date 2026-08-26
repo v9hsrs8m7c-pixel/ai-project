@@ -26,12 +26,12 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#a78bfa"};
+const CFG={"accent":"#a78bfa","w":480,"h":480};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
-function (g) {
+const engine = function (g) {
   const COLS = 10, ROWS = 18, W = g.w, CELL = W / COLS, H = ROWS * CELL; const SH = [[[1, 1, 1, 1]], [[1, 1], [1, 1]], [[1, 1, 0], [0, 1, 1]], [[0, 1, 1], [1, 1, 0]], [[1, 1, 1], [0, 1, 0]], [[1, 1, 1], [1, 0, 0]], [[1, 1, 1], [0, 0, 1]]];
   let board, cur, score, over, drop;
   function init() { board = Array.from({ length: ROWS }, () => Array(COLS).fill(0)); cur = nw(); score = 0; over = false; scoreEl.textContent = 0; }
@@ -43,7 +43,7 @@ function (g) {
   drop = setInterval(step, 400);
   addEventListener("keydown", e => { if (e.key === "ArrowLeft" && !hit(cur, cur.x - 1, cur.y)) cur.x--; if (e.key === "ArrowRight" && !hit(cur, cur.x + 1, cur.y)) cur.x++; if (e.key === "ArrowDown") step(); if (e.key === "ArrowUp") rot(); draw(); });
   document.getElementById("restart").addEventListener("click", () => { clearInterval(drop); init(); drop = setInterval(step, 400); }); init(); draw();
-}
+};
 engine(CFG);
 </script>
 </body>
