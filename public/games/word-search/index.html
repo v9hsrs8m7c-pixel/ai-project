@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Bubble Pop</title>
+<title>Word Search</title>
 <style>
-:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#22d3ee;--muted:#8b8ba7;--surface:#16162a}
+:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#34d399;--muted:#8b8ba7;--surface:#16162a}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}
@@ -20,25 +20,22 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 </head>
 <body>
 <div class="wrap">
-<div class="bar"><h1>Bubble Pop</h1><div class="score">Score: <span id="score">0</span></div></div>
+<div class="bar"><h1>Word Search</h1><div class="score">Score: <span id="score">0</span></div></div>
 <canvas id="c" width="480" height="480"></canvas>
-<div class="hint">Aim, shoot, and pop chains of same-color bubbles.</div>
+<div class="hint">Find the hidden words in the grid.</div>
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#22d3ee","size":8};
+const CFG={"accent":"#34d399","words":["GAME","PLAY","FUN","WIN","SKILL","JUMP","STAR"]};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
 function (g) {
-  const N = g.size || 8, W = g.w, CELL = W / N; const C = ["#f43f5e", "#22d3ee", "#34d399", "#fbbf24", "#a78bfa"];
-  let grid, score, sel;
-  function init() { grid = []; for (let r = 0; r < N; r++) { grid[r] = []; for (let c = 0; c < N; c++)grid[r][c] = (Math.random() * C.length) | 0; } score = 0; sel = null; scoreEl.textContent = 0; }
-  function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); for (let r = 0; r < N; r++)for (let c = 0; c < N; c++) { const x = c * CELL, y = r * CELL; ctx.fillStyle = C[grid[r][c]]; rr(x + 3, y + 3, CELL - 6, CELL - 6, 8); ctx.fill(); } if (sel) { ctx.strokeStyle = CFG.accent; ctx.lineWidth = 3; rr(sel.c * CELL + 3, sel.r * CELL + 3, CELL - 6, CELL - 6, 8); ctx.stroke(); } }
-  function swap(a, b) { [grid[a.r][a.c], grid[b.r][b.c]] = [grid[b.r][b.c], grid[a.r][a.c]]; }
-  function tap(c, r) { if (!sel) { sel = { r, c }; } else { if (Math.abs(sel.r - r) + Math.abs(sel.c - c) === 1) { swap(sel, { r, c }); score += 1; scoreEl.textContent = score; } sel = null; } draw(); }
-  canvas.addEventListener("click", e => { const rect = canvas.getBoundingClientRect(); const c = ((e.clientX - rect.left) / rect.width * W / CELL) | 0; const r = ((e.clientY - rect.top) / rect.height * W / CELL) | 0; if (r >= 0 && r < N && c >= 0 && c < N) tap(c, r); });
+  const N = 10, W = g.w, CELL = W / N; const words = g.words || ["GAME", "PLAY", "FUN", "WIN", "SKILL"]; let grid;
+  function init() { grid = Array.from({ length: N }, () => Array(N).fill("")); for (const w of words) place(w); for (let r = 0; r < N; r++)for (let c = 0; c < N; c++)if (!grid[r][c]) grid[r][c] = String.fromCharCode(65 + (Math.random() * 26 | 0)); scoreEl.textContent = "Find: " + words.join(" "); }
+  function place(w) { for (let t = 0; t < 30; t++) { const dr = (Math.random() * 3 | 0) - 1, dc = (Math.random() * 3 | 0) - 1; if (dr === 0 && dc === 0) continue; let r = Math.random() * N | 0, c = Math.random() * N | 0; let ok2 = true; const pts = []; for (const ch of w) { if (r < 0 || c < 0 || r >= N || c >= N || (grid[r][c] && grid[r][c] !== ch)) { ok2 = false; break; } pts.push([r, c]); r += dr; c += dc; } if (ok2) { pts.forEach((p, i) => grid[p[0]][p[1]] = w[i]); return; } } }
+  function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); ctx.font = "600 " + (CELL * 0.55) + "px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; for (let r = 0; r < N; r++)for (let c = 0; c < N; c++) { ctx.fillStyle = CFG.accent; ctx.fillText(grid[r][c], c * CELL + CELL / 2, r * CELL + CELL / 2); } }
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
 }
 engine(CFG);

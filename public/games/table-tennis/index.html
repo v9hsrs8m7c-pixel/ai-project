@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Brick Breaker</title>
+<title>Table Tennis</title>
 <style>
-:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#fbbf24;--muted:#8b8ba7;--surface:#16162a}
+:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#f43f5e;--muted:#8b8ba7;--surface:#16162a}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}
@@ -20,22 +20,24 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 </head>
 <body>
 <div class="wrap">
-<div class="bar"><h1>Brick Breaker</h1><div class="score">Score: <span id="score">0</span></div></div>
+<div class="bar"><h1>Table Tennis</h1><div class="score">Score: <span id="score">0</span></div></div>
 <canvas id="c" width="480" height="480"></canvas>
-<div class="hint">Smash every brick with one ball and a trusty paddle.</div>
+<div class="hint">Rally for the win across the net.</div>
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#fbbf24"};
+const CFG={"accent":"#f43f5e"};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
 function (g) {
-  const W = g.w, H = g.h; let ball, paddle, score, over;
-  function init() { ball = { x: W / 2, y: 60, vx: 2, vy: 2 }; paddle = { x: W / 2, w: 80 }; score = 0; over = false; scoreEl.textContent = 0; }
-  function loop() { if (over) return; ball.vy += 0.12; ball.x += ball.vx; ball.y += ball.vy; if (ball.x < 8 || ball.x > W - 8) ball.vx *= -1; if (ball.y < 8) ball.vy *= -1; if (ball.y > H - 14 && ball.x > paddle.x - paddle.w / 2 && ball.x < paddle.x + paddle.w / 2) { ball.vy = -Math.abs(ball.vy); score += 1; scoreEl.textContent = score; } if (ball.y > H) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(paddle.x - paddle.w / 2, H - 12, paddle.w, 10, 5); ctx.fill(); ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 8, 0, 7); ctx.fill(); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
-  canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); paddle.x = (e.clientX - r.left) / r.width * W; });
+  const W = g.w, H = g.h; let ball, target, score, over;
+  function init() { ball = { x: W / 2, y: H - 30, vx: 0, vy: 0, live: false }; target = { x: rand(40, W - 40), y: rand(40, H / 2) }; score = 0; over = false; scoreEl.textContent = 0; }
+  function loop() { if (ball.live && !over) { ball.vy += 0.4; ball.x += ball.vx; ball.y += ball.vy; if (ball.y > H) { ball.live = false; } if (Math.hypot(ball.x - target.x, ball.y - target.y) < 26) { score += 1; scoreEl.textContent = score; target = { x: rand(40, W - 40), y: rand(40, H / 2) }; ball.live = false; } } ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = CFG.accent; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(target.x, target.y, 22, 0, 7); ctx.stroke(); ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 12, 0, 7); ctx.fill(); requestAnimationFrame(loop); }
+  function shoot(dx, dy) { if (ball.live) return; const m = Math.hypot(dx, dy) || 1; ball.vx = dx / m * 9; ball.vy = dy / m * 9; ball.live = true; }
+  canvas.addEventListener("click", e => { const r = canvas.getBoundingClientRect(); shoot((e.clientX - r.left) / r.width * W - ball.x, (e.clientY - r.top) / r.height * H - ball.y); });
+  addEventListener("keydown", e => { if (e.key === " ") shoot(0, -12); });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
 }
 engine(CFG);

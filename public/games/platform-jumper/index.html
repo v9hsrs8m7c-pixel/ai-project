@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Brick Breaker</title>
+<title>Platform Jumper</title>
 <style>
 :root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#fbbf24;--muted:#8b8ba7;--surface:#16162a}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -20,9 +20,9 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 </head>
 <body>
 <div class="wrap">
-<div class="bar"><h1>Brick Breaker</h1><div class="score">Score: <span id="score">0</span></div></div>
+<div class="bar"><h1>Platform Jumper</h1><div class="score">Score: <span id="score">0</span></div></div>
 <canvas id="c" width="480" height="480"></canvas>
-<div class="hint">Smash every brick with one ball and a trusty paddle.</div>
+<div class="hint">Hop across gaps and climb the stage.</div>
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
@@ -32,10 +32,11 @@ function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r)
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
 function (g) {
-  const W = g.w, H = g.h; let ball, paddle, score, over;
-  function init() { ball = { x: W / 2, y: 60, vx: 2, vy: 2 }; paddle = { x: W / 2, w: 80 }; score = 0; over = false; scoreEl.textContent = 0; }
-  function loop() { if (over) return; ball.vy += 0.12; ball.x += ball.vx; ball.y += ball.vy; if (ball.x < 8 || ball.x > W - 8) ball.vx *= -1; if (ball.y < 8) ball.vy *= -1; if (ball.y > H - 14 && ball.x > paddle.x - paddle.w / 2 && ball.x < paddle.x + paddle.w / 2) { ball.vy = -Math.abs(ball.vy); score += 1; scoreEl.textContent = score; } if (ball.y > H) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = CFG.accent; rr(paddle.x - paddle.w / 2, H - 12, paddle.w, 10, 5); ctx.fill(); ctx.fillStyle = "#fbbf24"; ctx.beginPath(); ctx.arc(ball.x, ball.y, 8, 0, 7); ctx.fill(); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 26px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
-  canvas.addEventListener("mousemove", e => { const r = canvas.getBoundingClientRect(); paddle.x = (e.clientX - r.left) / r.width * W; });
+  const W = g.w, H = g.h; let p, plats, vy, score, over;
+  function init() { p = { x: W / 2, y: H - 60 }; vy = 0; plats = []; for (let i = 0; i < 8; i++)plats.push({ x: rand(0, W - 50), y: H - i * 70, w: 50 }); score = 0; over = false; }
+  function loop() { if (over) return; vy += 0.5; p.y += vy; if (p.y < H / 2) { p.y = H / 2; plats.forEach(pl => pl.y -= vy ? 0 : 0); plats = plats.map(pl => ({ ...pl, y: pl.y + 3 })).filter(pl => pl.y < H + 20); while (plats.length < 8)plats.push({ x: rand(0, W - 50), y: plats[plats.length - 1].y - 70, w: 50 }); } const on = plats.find(pl => p.x + 14 > pl.x && p.x - 14 < pl.x + pl.w && Math.abs((p.y + 24) - pl.y) < 8 && vy > 0); if (on) { vy = -9; score += 1; scoreEl.textContent = score; } if (p.y > H) over = true; ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); plats.forEach(pl => { ctx.fillStyle = "#34d399"; rr(pl.x, pl.y, pl.w, 12, 5); ctx.fill(); }); ctx.fillStyle = CFG.accent; rr(p.x - 14, p.y - 24, 28, 28, 8); ctx.fill(); if (over) { ctx.fillStyle = "rgba(8,8,20,.7)"; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#f43f5e"; ctx.font = "700 28px system-ui"; ctx.textAlign = "center"; ctx.fillText("Game Over", W / 2, H / 2); } requestAnimationFrame(loop); }
+  addEventListener("keydown", e => { if (e.key === "ArrowLeft") p.x -= 22; if (e.key === "ArrowRight") p.x += 22; });
+  canvas.addEventListener("touchstart", e => { const x = e.touches[0].clientX; p.x = x < innerWidth / 2 ? Math.max(14, p.x - 22) : Math.min(W - 14, p.x + 22); }, { passive: true });
   document.getElementById("restart").addEventListener("click", () => { init(); loop(); }); init(); loop();
 }
 engine(CFG);

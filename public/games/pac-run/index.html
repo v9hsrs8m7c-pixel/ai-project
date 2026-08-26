@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Pac Run</title>
+<style>
+:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#fbbf24;--muted:#8b8ba7;--surface:#16162a}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}
+h1{font-size:20px;letter-spacing:.04em}
+.wrap{width:min(92vw,480px)}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.score{background:#16162a;border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}
+canvas{width:100%;background:#16162a;border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
+.hint{color:var(--muted);font-size:13px;text-align:center}
+button{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="bar"><h1>Pac Run</h1><div class="score">Score: <span id="score">0</span></div></div>
+<canvas id="c" width="480" height="480"></canvas>
+<div class="hint">Eat the dots and clear the maze.</div>
+<div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
+</div>
+<script>
+const CFG={"accent":"#fbbf24"};
+const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
+function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
+function rand(a,b){return a+Math.random()*(b-a);}
+function chance(p){return Math.random()<p;}
+function (g) {
+  const N = 13, W = g.w, CELL = W / N; let px, py, dots, score, over, gx, gy;
+  function init() { px = 1; py = 1; dots = Array.from({ length: N }, () => Array(N).fill(1)); dots[1][1] = 0; gx = N - 2; gy = N - 2; score = 0; over = false; scoreEl.textContent = 0; }
+  function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); for (let r = 0; r < N; r++)for (let c = 0; c < N; c++) { const wall = (r === 0 || c === 0 || r === N - 1 || c === N - 1) || ((r % 2 === 0) && (c % 2 === 0)); if (wall) { ctx.fillStyle = "#3a3a5c"; ctx.fillRect(c * CELL, r * CELL, CELL, CELL); } else if (dots[r][c]) { ctx.fillStyle = "#8b8ba7"; ctx.beginPath(); ctx.arc(c * CELL + CELL / 2, r * CELL + CELL / 2, 2, 0, 7); ctx.fill(); } } ctx.fillStyle = CFG.accent; ctx.beginPath(); ctx.arc(px * CELL + CELL / 2, py * CELL + CELL / 2, CELL / 2 - 2, 0, 7); ctx.fill(); }
+  function mv(dx, dy) { const nx = px + dx, ny = py + dy; const wall = (nx === 0 || ny === 0 || nx === N - 1 || ny === N - 1) || ((ny % 2 === 0) && (nx % 2 === 0)); if (!wall) { px = nx; py = ny; if (dots[py][px]) { dots[py][px] = 0; score += 1; scoreEl.textContent = score; } } draw(); }
+  addEventListener("keydown", e => { const k = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]; if (k) { e.preventDefault(); mv(k[0], k[1]); } });
+  canvas.addEventListener("touchstart", e => { const t = e.touches[0]; canvas._sx = t.clientX; canvas._sy = t.clientY; }, { passive: true });
+  canvas.addEventListener("touchend", e => { const t = e.changedTouches[0], dx = t.clientX - canvas._sx, dy = t.clientY - canvas._sy; if (Math.abs(dx) > Math.abs(dy)) mv(dx > 0 ? 1 : -1, 0); else mv(0, dy > 0 ? 1 : -1); }, { passive: true });
+  document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
+}
+engine(CFG);
+</script>
+</body>
+</html>

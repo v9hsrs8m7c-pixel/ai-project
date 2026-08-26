@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Bubble Pop</title>
+<title>Sudoku Classic</title>
 <style>
-:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#22d3ee;--muted:#8b8ba7;--surface:#16162a}
+:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#a78bfa;--muted:#8b8ba7;--surface:#16162a}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}
@@ -20,25 +20,22 @@ button{background:var(--accent);color:#04121a;border:0;border-radius:10px;paddin
 </head>
 <body>
 <div class="wrap">
-<div class="bar"><h1>Bubble Pop</h1><div class="score">Score: <span id="score">0</span></div></div>
+<div class="bar"><h1>Sudoku Classic</h1><div class="score">Score: <span id="score">0</span></div></div>
 <canvas id="c" width="480" height="480"></canvas>
-<div class="hint">Aim, shoot, and pop chains of same-color bubbles.</div>
+<div class="hint">Fill the grid with 1 to 9, no repeats.</div>
 <div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
 </div>
 <script>
-const CFG={"accent":"#22d3ee","size":8};
+const CFG={"accent":"#a78bfa"};
 const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
 function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
 function rand(a,b){return a+Math.random()*(b-a);}
 function chance(p){return Math.random()<p;}
 function (g) {
-  const N = g.size || 8, W = g.w, CELL = W / N; const C = ["#f43f5e", "#22d3ee", "#34d399", "#fbbf24", "#a78bfa"];
-  let grid, score, sel;
-  function init() { grid = []; for (let r = 0; r < N; r++) { grid[r] = []; for (let c = 0; c < N; c++)grid[r][c] = (Math.random() * C.length) | 0; } score = 0; sel = null; scoreEl.textContent = 0; }
-  function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); for (let r = 0; r < N; r++)for (let c = 0; c < N; c++) { const x = c * CELL, y = r * CELL; ctx.fillStyle = C[grid[r][c]]; rr(x + 3, y + 3, CELL - 6, CELL - 6, 8); ctx.fill(); } if (sel) { ctx.strokeStyle = CFG.accent; ctx.lineWidth = 3; rr(sel.c * CELL + 3, sel.r * CELL + 3, CELL - 6, CELL - 6, 8); ctx.stroke(); } }
-  function swap(a, b) { [grid[a.r][a.c], grid[b.r][b.c]] = [grid[b.r][b.c], grid[a.r][a.c]]; }
-  function tap(c, r) { if (!sel) { sel = { r, c }; } else { if (Math.abs(sel.r - r) + Math.abs(sel.c - c) === 1) { swap(sel, { r, c }); score += 1; scoreEl.textContent = score; } sel = null; } draw(); }
-  canvas.addEventListener("click", e => { const rect = canvas.getBoundingClientRect(); const c = ((e.clientX - rect.left) / rect.width * W / CELL) | 0; const r = ((e.clientY - rect.top) / rect.height * W / CELL) | 0; if (r >= 0 && r < N && c >= 0 && c < N) tap(c, r); });
+  const N = 9, W = g.w, CELL = W / N; let board, sol;
+  function init() { sol = make(); board = sol.map(r => r.slice()); for (let i = 0; i < N; i++)for (let j = 0; j < N; j++)if (chance(0.55)) board[i][j] = 0; scoreEl.textContent = "Fill it"; }
+  function make() { const b = Array.from({ length: N }, () => Array(N).fill(0)); function ok(r, c, v) { for (let i = 0; i < N; i++)if (b[r][i] === v || b[i][c] === v) return false; const br = (r / 3 | 0) * 3, bc = (c / 3 | 0) * 3; for (let i = 0; i < 3; i++)for (let j = 0; j < 3; j++)if (b[br + i][bc + j] === v) return false; return true; } function fill(r, c) { if (r === N) return true; if (c === N) return fill(r + 1, 0); if (b[r][c]) return fill(r, c + 1); for (let v = 1; v <= 9; v++) { if (ok(r, c, v)) { b[r][c] = v; if (fill(r, c + 1)) return true; b[r][c] = 0; } } return false; } fill(0, 0); return b; }
+  function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, W); ctx.font = "600 " + (CELL * 0.5) + "px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; for (let r = 0; r < N; r++)for (let c = 0; c < N; c++) { const x = c * CELL, y = r * CELL; ctx.strokeStyle = (r % 3 === 0 || c % 3 === 0) ? "#4a4a78" : "#2a2a44"; ctx.lineWidth = 1; ctx.strokeRect(x, y, CELL, CELL); if (board[r][c]) { ctx.fillStyle = "#e7e7f5"; ctx.fillText(board[r][c], x + CELL / 2, y + CELL / 2); } } }
   document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
 }
 engine(CFG);

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Ball Sort</title>
+<style>
+:root{--bg:#0b0b14;--fg:#e7e7f5;--accent:#f43f5e;--muted:#8b8ba7;--surface:#16162a}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;-webkit-user-select:none;user-select:none;touch-action:none}
+h1{font-size:20px;letter-spacing:.04em}
+.wrap{width:min(92vw,480px)}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.score{background:#16162a;border:1px solid #2a2a44;border-radius:10px;padding:6px 12px;font-weight:700}
+canvas{width:100%;background:#16162a;border:1px solid #2a2a44;border-radius:14px;display:block;touch-action:none}
+.hint{color:var(--muted);font-size:13px;text-align:center}
+button{background:var(--accent);color:#04121a;border:0;border-radius:10px;padding:8px 16px;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="bar"><h1>Ball Sort</h1><div class="score">Score: <span id="score">0</span></div></div>
+<canvas id="c" width="480" height="480"></canvas>
+<div class="hint">Sort the balls by color, one tube at a time.</div>
+<div style="text-align:center;margin-top:10px"><button id="restart">New Game</button></div>
+</div>
+<script>
+const CFG={"accent":"#f43f5e","tubes":5,"cols":4};
+const canvas=document.getElementById('c');const ctx=canvas.getContext('2d');const scoreEl=document.getElementById('score');
+function rr(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);ctx.closePath();}
+function rand(a,b){return a+Math.random()*(b-a);}
+function chance(p){return Math.random()<p;}
+function (g) {
+  const W = g.w, H = g.h; const TUBES = g.tubes || 4, COLS = g.cols || 4, colors = ["#f43f5e", "#22d3ee", "#34d399", "#fbbf24", "#a78bfa", "#fb7185"];
+  let tubes, sel;
+  function init() { const pool = []; for (let i = 0; i < TUBES; i++)for (let j = 0; j < COLS; j++)pool.push(colors[i % colors.length]); for (let i = pool.length - 1; i > 0; i--) { const k = (Math.random() * (i + 1)) | 0; [pool[i], pool[k]] = [pool[k], pool[i]]; } tubes = []; for (let i = 0; i < TUBES; i++)tubes.push(pool.slice(i * COLS, i * COLS + COLS)); sel = -1; score = 0; scoreEl.textContent = 0; }
+  let score;
+  function top(t) { for (let i = COLS - 1; i >= 0; i--)if (t[i] !== null) return i; return -1; }
+  function draw() { ctx.fillStyle = "#0b0b14"; ctx.fillRect(0, 0, W, H); const tw = 44, th = 30, gap = (W - TUBES * tw) / (TUBES + 1); for (let i = 0; i < TUBES; i++) { const x = gap + i * (tw + gap); for (let j = 0; j < COLS; j++) { const y = H - 20 - (j + 1) * th; if (tubes[i][j] !== null) { ctx.fillStyle = tubes[i][j]; rr(x, y, tw, th - 3, 4); ctx.fill(); } } ctx.strokeStyle = i === sel ? CFG.accent : "#3a3a5c"; ctx.lineWidth = 2; rr(x, H - 20 - COLS * th, tw, COLS * th, 6); ctx.stroke(); } }
+  function tap(i) { if (sel === -1) { if (top(tubes[i]) !== -1) sel = i; return; } if (sel === i) { sel = -1; return; } const a = top(tubes[sel]), b = top(tubes[i]); if (b === -1 && a !== -1) { for (let j = a; j >= 0; j--)tubes[i][j] = tubes[sel][j]; for (let j = 0; j <= a; j++)tubes[sel][j] = null; sel = -1; score += 1; scoreEl.textContent = score; } else if (a !== -1 && b !== -1 && tubes[sel][a] === tubes[i][b] && b < COLS - 1) { tubes[i][b + 1] = tubes[sel][a]; tubes[sel][a] = null; sel = -1; score += 1; scoreEl.textContent = score; } else sel = -1; draw(); }
+  canvas.addEventListener("click", e => { const r = canvas.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * W; const gap = (W - TUBES * 44) / (TUBES + 1); const i = Math.floor((x - gap / 2) / (44 + gap)); if (i >= 0 && i < TUBES) tap(i); });
+  document.getElementById("restart").addEventListener("click", () => { init(); draw(); }); init(); draw();
+}
+engine(CFG);
+</script>
+</body>
+</html>

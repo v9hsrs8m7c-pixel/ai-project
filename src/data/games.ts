@@ -1,6 +1,7 @@
 import type { CategoryInfo, Game } from "../config/types.ts";
 import { getGDGames } from "./sources/gamedistribution/adapter.ts";
 import { getSelfHostedGames } from "./sources/selfhosted/games.ts";
+import { getSelfHostedGamesBatch2 } from "./sources/selfhosted/games-batch2.ts";
 
 // The catalog blends two sources today:
 //   1. GameDistribution adapter (mock now, live DGI feed later) — Phase 2.
@@ -8,7 +9,7 @@ import { getSelfHostedGames } from "./sources/selfhosted/games.ts";
 //      to build real playable, jump-free traffic we fully own.
 // Both normalize into the same decoupled `Game` model, so pages never care
 // which source a game came from.
-export const games: Game[] = [...getGDGames(), ...getSelfHostedGames()];
+export const games: Game[] = [...getGDGames(), ...getSelfHostedGames(), ...getSelfHostedGamesBatch2()];
 
 // Return only the games that belong to a given site. Reserved for future
 // multi-site catalog filtering; not yet consumed by any page.
