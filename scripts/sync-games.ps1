@@ -40,7 +40,7 @@ if (Test-Path $tsc) {
 }
 
 # 4) commit + push (retry 4x to survive HTTP/2 connection reset)
-git add public/games src/data/sources/selfhosted/games-imported.ts scripts/regen-imported.mjs scripts/import-games.mjs scripts/sync-games.ps1
+git add public/games public/ads.txt src/data/sources/selfhosted/games-imported.ts scripts/regen-imported.mjs scripts/import-games.mjs scripts/sync-games.ps1
 git commit -m "chore: import games from GitHub" 2>&1 | Out-Null
 $ok = $false
 for ($i = 1; $i -le 4; $i++) {
