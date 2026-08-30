@@ -87,6 +87,21 @@ function prettify(name) {
 }
 
 const used = new Set();
+// 非游戏黑名单: 工具/模拟/查看器/沙盒/训练器/大厅页。用户确认删除, 防止未来
+// 全量重导(node import-games.mjs)把这些非游戏 slug 重新拉回 public/games。
+const SKIP_SLUGS = new Set([
+  "index-rysm", "index-rysm-2", "index-rysm-3",
+  "program-code-indenter-dedenter-v01", "program-learn-everything-v01", "program-next-button-predictor-v01",
+  "simulation-2d-buoyant-thermal-plume-v01", "simulation-2d-mushroom-cloud-buoyant-thermal-blast-with-navier-stokes-boussinesq-v01",
+  "simulation-2d-navier-stokes-toroidal-vortex-air-cannon-v01", "simulation-2d-smoke-fluid-simulation-navier-stokes-v01",
+  "simulation-4d-tesseract-explorer-still-v01", "simulation-5d-penteract-explorer-still-v01", "simulation-beautiful-like-wind-v01",
+  "simulation-blackhole-mobile-improved-v01", "simulation-cfd-research-sandbox-v01", "simulation-disco-butterfly-v01",
+  "simulation-flatland-proto-v01", "simulation-mandelbrot-shutter-v01", "simulation-mandelbrot-v01", "simulation-music-visual-2d-v01",
+  "simulation-navier-stokes-fluid-simulation-v01", "simulation-schlieren-fluid-lab-ns-vorticity-v01", "simulation-three-body-problem-v01",
+  "simulation-vector-normalization-simulation-v01", "tools-card-counter-trainer-v01", "tools-dual-html-player-v01",
+  "tools-first-online-html-viewer-v01", "tools-game-vector-normalization-simulator-v01", "tools-nato-phonetic-trainer-v01",
+  "tools-second-online-html-viewer-v01", "tools-third-online-html-viewer-v01", "tools-unity-sandbox-with-ai-v01", "tools-unity-sandbox-v01",
+]);
 function uniqSlug(base, owner) {
   const clean = base.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
   if (!used.has(clean)) { used.add(clean); return clean; }
@@ -187,6 +202,7 @@ async function run() {
       if (!htmlBuf) { console.warn("  下载失败", he.path); continue; }
       const html = htmlBuf.toString("utf8");
       const slug = uniqSlug(basename(he.path).replace(/\.html?$/i, ""), owner);
+      if (SKIP_SLUGS.has(slug)) { console.log("  跳过非游戏(黑名单)", slug); continue; }
       const dst = join(GAMES_DIR, slug);
       rmSync(dst, { recursive: true, force: true });
       mkdirSync(dst, { recursive: true });
