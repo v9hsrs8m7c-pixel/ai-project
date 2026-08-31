@@ -104,6 +104,7 @@ export interface Game {
   embedUrl?: string; // publisher-attributed iframe src
   embedCode?: string; // raw GD embed snippet (if provided)
   instructions?: string; // how to play
+  thumb?: string; // cover/thumbnail image URL (GM feed supplies this)
   width?: number;
   height?: number;
   tags?: string[]; // GD tags, reserved for SEO
@@ -118,7 +119,7 @@ export interface Game {
   // Origin of the game. "gamedistribution" = GD embed (Phase 2 + revenue
   // share later). "selfhosted" = our own original HTML5 game served from
   // /public (Stage A: build traffic with playable, jump-free content we own).
-  source?: "gamedistribution" | "selfhosted";
+  source?: "gamedistribution" | "selfhosted" | "gamemonetize";
 }
 
 // Derived category summary used by the Categories section and category pages.

@@ -42,9 +42,11 @@ export function GameEmbed({
 
   // Self-hosted games are our own local assets — render as-is, no referrer.
   // GD embeds get the attribution query only when we also have the slug.
+  // GameMonetize (gamemonetize) embeds need NO referrer — revenue is attributed
+  // by the approved domain registered in the GM backend, not by a query param.
   const finalSrc = isSelfHosted
     ? embedUrl
-    : embedUrl && slug
+    : embedUrl && slug && source === "gamedistribution"
       ? withReferrer(embedUrl, siteDomain, slug)
       : embedUrl;
 

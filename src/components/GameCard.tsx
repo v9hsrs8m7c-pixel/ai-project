@@ -14,15 +14,26 @@ export function GameCard({ game }: { game: Game }) {
         borderColor: "color-mix(in srgb, var(--color-text) 10%, transparent)",
       }}
     >
-      {/* Uniform 3:4 cover — same ratio for every game card. */}
+      {/* Uniform 3:4 cover — real thumbnail when available (GM games), else
+          emoji fallback for legacy entries. */}
       <div
-        className="relative grid aspect-[3/4] place-items-center text-6xl"
+        className="relative grid aspect-[3/4] place-items-center overflow-hidden text-6xl"
         style={{
           background:
             "radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--color-primary) 35%, transparent), transparent 60%)",
         }}
       >
-        <span aria-hidden>{game.emoji}</span>
+        {game.thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={game.thumb}
+            alt={game.title}
+            loading="lazy"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <span aria-hidden>{game.emoji}</span>
+        )}
         {game.isNew && (
           <span
             className="absolute left-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"

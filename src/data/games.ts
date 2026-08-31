@@ -1,16 +1,16 @@
 import type { CategoryInfo, Game } from "../config/types.ts";
-import { getGDGames } from "./sources/gamedistribution/adapter.ts";
-import { getImportedGames } from "./sources/selfhosted/games-imported.ts";
+import { getGMGames } from "./sources/gamemonetize/games-gm.ts";
 
-// The catalog blends two sources today:
-//   1. GameDistribution adapter (mock now, live DGI feed later) — Phase 2.
-//   2. Imported HTML5 games served from /public/games — vetted MIT repos
-//      (self-contained or public-CDN). The 50 earlier self-made engines were
-//      hidden (not playable); their files stay in public/games for recovery,
-//      just not surfaced here.
-// Both normalize into the same decoupled `Game` model, so pages never care
-// which source a game came from.
-export const games: Game[] = [...getGDGames(), ...getImportedGames()];
+// The live catalog is now GameMonetize publisher games: real, playable, ad-
+// monetized HTML5 titles pulled from the GM feed. Each page surrounds the
+// iframe with original SEO copy (see games-gm.ts) so the game itself — which
+// lives inside an iframe and is not crawlable — still earns organic traffic.
+//
+// Earlier local open-source games (selfhosted) are kept on disk under
+// public/games + games-imported.ts as a backup but are no longer surfaced,
+// since they carry no ad revenue. Re-enable by importing getImportedGames()
+// and spreading it back into `games` below.
+export const games: Game[] = [...getGMGames()];
 
 // Return only the games that belong to a given site. Reserved for future
 // multi-site catalog filtering; not yet consumed by any page.
