@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 import { getAllGames, getCategories } from "@/data/games";
 import { resolveCurrentSite } from "@/lib/site";
 
+// Static export: metadata routes must be pre-rendered at build time.
+export const dynamic = "force-static";
+
 // Data-driven sitemap: every game and category URL is derived from the live
 // catalog so it stays correct as games are added — no hand-maintained list.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

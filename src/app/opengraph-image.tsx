@@ -1,5 +1,8 @@
 import { ImageResponse } from "next/og";
 
+// Static export: pre-render the OG image at build time.
+export const dynamic = "force-static";
+
 // Dynamic OG image generated at request time via next/og — no binary asset to
 // keep in sync. Branded with the site's theme colors (#0b0b14 bg / #22d3ee accent).
 export const alt = "Darlynmae — Free HTML5 Games";

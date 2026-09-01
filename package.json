@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:static": "STATIC_EXPORT=1 next build",
     "start": "next start",
     "lint": "next lint",
     "test": "node --test --experimental-strip-types src/config/sites/__tests__/site.test.ts src/data/__tests__/games.test.ts src/data/sources/gamedistribution/__tests__/adapter.test.ts"
