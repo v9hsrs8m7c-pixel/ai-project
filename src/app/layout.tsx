@@ -5,6 +5,7 @@ import { resolveCurrentSite } from "@/lib/site";
 import type { Theme } from "@/config/types";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { Analytics } from "@/components/Analytics";
 
 // Map a site's theme tokens onto CSS custom properties so each site can be
 // visually themed independently without touching component code.
@@ -22,6 +23,10 @@ function themeToCssVars(theme: Theme): CSSProperties {
 // in SiteConfig). Switching domains later automatically switches metadata.
 export async function generateMetadata(): Promise<Metadata> {
   const site = await resolveCurrentSite();
+  // Google Search Console verification meta tag. Driven by an env var so the
+  // site builds fine before the code is known; once NEXT_PUBLIC_GSC_VERIFICATION
+  // is set and rebuilt, GSC can verify ownership via the meta tag on every page.
+  const gscCode = process.env.NEXT_PUBLIC_GSC_VERIFICATION;
   return {
     metadataBase: new URL(
       site.seo.canonicalDomain
@@ -35,6 +40,7 @@ export async function generateMetadata(): Promise<Metadata> {
     description: site.seo.defaultDescription ?? site.description,
     keywords: site.seo.keywords,
     robots: site.seo.robots,
+    ...(gscCode ? { verification: { google: gscCode } } : {}),
     openGraph: {
       title: site.seo.defaultTitle ?? site.title,
       description: site.seo.defaultDescription ?? site.description,
@@ -61,6 +67,7 @@ export default async function RootLayout({
         style={themeToCssVars(site.theme)}
         className="flex min-h-screen flex-col"
       >
+        <Analytics />
         <Header site={site} />
         <div className="flex-1">{children}</div>
         <Footer site={site} />

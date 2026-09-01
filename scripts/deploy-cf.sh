@@ -9,6 +9,9 @@
 #     gitignore 的 CF_DEPLOY_SECRETS.md 中解析（该文件勿提交远程）。
 #   - 仅做「构建 + 部署」。git push 请另行手动执行。
 #   - 终端必须开全局 TUN 代理，否则 npm / wrangler 会被 ECONNRESET 重置。
+#   - 可选：若项目根有 .env.local（含 NEXT_PUBLIC_GA4_MEASUREMENT_ID /
+#     NEXT_PUBLIC_GSC_VERIFICATION），Next 构建时会自动注入 GA4 与 GSC 验证标签。
+#     没这两个变量也能正常构建，只是不带统计。详见 GSC_GA4_SETUP.md。
 set -euo pipefail
 
 # 进入项目根目录（脚本所在目录的上一级）
