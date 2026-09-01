@@ -47,6 +47,14 @@ fi
 echo "▶ [1/2] 构建静态站点 (STATIC_EXPORT=1 next build) ..."
 STATIC_EXPORT=1 ./node_modules/.bin/next build
 
+# 1.5) 清理孤儿薄内容页：移除 out/games/ 下自托管游戏本体目录（不再展示，
+#      避免被搜索引擎当作薄内容抓取）。门户 .html 页是文件、游戏本体是子目录，
+#      两者 slug 不重叠，删子目录即可，安全且幂等。（用原生 rm 比 Node fs.rm
+#      在 Windows 上快得多。）
+echo "▶ [1.5/2] 清理孤儿自托管游戏目录 ..."
+rm -rf out/games/*/ 2>/dev/null || true
+echo "✓ out/games 仅保留门户 .html（$(ls out/games/*.html 2>/dev/null | wc -l) 个）"
+
 # 2) 部署到 Cloudflare Pages
 echo "▶ [2/2] 部署 out/ 到 Cloudflare Pages (project: darlynmae) ..."
 npx wrangler pages deploy out --project-name darlynmae
