@@ -1,8 +1,15 @@
 // import-gm-games.mjs
 // ---------------------------------------------------------------------------
 // Pulls GameMonetize publisher games from the cached feed JSON, selects a
-// balanced ~200-game catalog (even per category), and writes a typed
+// quality-weighted ~200-game catalog (premium-first, with per-category floor
+// & ceiling so no single category dominates), and writes a typed
 // `games-gm.ts` data source.
+//
+// "Premium" / 精品 signal = GameMonetize's own tags:
+//   - "Best Games"  (GM-certified top picks, 106 in feed)  -> featured
+//   - "3D" / "3D Games" (visually rich)                    -> popular
+// The feed has NO real rating/plays field, so quality is approximated from
+// these tags; the scorer below is the single source of truth.
 //
 // IMPORTANT (SEO): every GameMonetize publisher receives the SAME `description`
 // from the feed. Copying it verbatim makes our pages identical to thousands of
@@ -22,7 +29,9 @@ const CACHE = resolve(ROOT, "scripts/.cache/gm-feed-raw.json");
 const OUT_DIR = resolve(ROOT, "src/data/sources/gamemonetize");
 const OUT_FILE = resolve(OUT_DIR, "games-gm.ts");
 
-const TARGET = 200; // 首批规模（按分类均匀选取，每类平摊后再补齐）
+const TARGET = 200; // 首批规模（质量加权选品 + 每类保底/上限）
+const CAT_FLOOR = 6; // 每类最少名额（库存不足则全取），保证分类覆盖
+const CAT_CEIL = 20; // 每类最多名额，防止 Puzzle/Hypercasual 霸屏
 
 // --- slug -----------------------------------------------------------------
 function slugify(s) {
@@ -143,41 +152,71 @@ function genContent(t) {
   };
 }
 
-// --- selection ------------------------------------------------------------
-function selectBalanced(games, target) {
+// --- quality score --------------------------------------------------------
+// Approximates "premium" from GameMonetize's own tags (feed has no real
+// rating/plays). Higher = better. Single source of truth for selection & flags.
+function qualityScore(g) {
+  const tags = (g.tags || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let s = 0;
+  if (tags.includes("Best Games")) s += 3;
+  if (tags.some((t) => t === "3D" || t === "3D Games")) s += 1;
+  if (tags.includes("Best")) s += 1; // secondary premium hint
+  return s;
+}
+
+function isBestGame(g) {
+  const tags = (g.tags || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return tags.includes("Best Games");
+}
+function is3DGame(g) {
+  const tags = (g.tags || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return tags.some((t) => t === "3D" || t === "3D Games");
+}
+
+// --- selection: quality-weighted with per-category floor & ceiling --------
+// Pass 1: guarantee every category at least CAT_FLOOR games (top by quality).
+// Pass 2: fill remaining slots by global quality, skipping any category that
+//         already hit CAT_CEIL — keeps premium games first without letting
+//         Puzzle/Hypercasual monopolize the catalog.
+function selectQualityWeighted(games, target, floor = CAT_FLOOR, ceil = CAT_CEIL) {
   const byCat = new Map();
   for (const g of games) {
     const c = g.category || "Other";
     if (!byCat.has(c)) byCat.set(c, []);
     byCat.get(c).push(g);
   }
-  const cats = [...byCat.entries()];
-  const numCats = cats.length;
-  const base = Math.floor(target / numCats); // 每类平摊配额
+  // sort each category by quality desc so floor/ceil picks favor premium games
+  for (const [, list] of byCat) list.sort((a, b) => qualityScore(b) - qualityScore(a));
+
   const out = [];
   const used = new Set();
+  const catCount = new Map();
 
-  // 第一遍：每类取 base 个（受该类库存上限约束）
-  const queues = [];
-  for (const [, list] of cats) {
-    const take = Math.min(base, list.length);
-    for (const g of list.slice(0, take)) {
-      used.add(g.id);
-      out.push(g);
-    }
-    if (list.length > take) queues.push(list.slice(take)); // 剩余进补齐队列
-  }
-
-  // 补齐：在仍有剩余的类之间轮询（round-robin），保证额外名额均匀分配
-  let i = 0;
-  while (out.length < target && queues.some((q) => q.length > 0)) {
-    const q = queues[i % queues.length];
-    i++;
-    if (q.length === 0) continue;
-    const g = q.shift();
-    if (used.has(g.id)) continue;
+  const take = (g) => {
     used.add(g.id);
     out.push(g);
+    const c = g.category || "Other";
+    catCount.set(c, (catCount.get(c) || 0) + 1);
+  };
+
+  // Pass 1 — per-category floor (capped at available stock)
+  for (const [, list] of byCat) {
+    const n = Math.min(floor, list.length);
+    for (let i = 0; i < n; i++) take(list[i]);
+  }
+
+  // Pass 2 — fill by global quality, respecting per-category ceiling
+  const rest = games
+    .filter((g) => !used.has(g.id))
+    .sort((a, b) => qualityScore(b) - qualityScore(a));
+  for (const g of rest) {
+    if (out.length >= target) break;
+    const c = g.category || "Other";
+    if ((catCount.get(c) || 0) >= ceil) continue;
+    take(g);
   }
   return out;
 }
@@ -191,8 +230,8 @@ function main() {
   const raw = JSON.parse(readFileSync(CACHE, "utf-8"));
   console.log(`read ${raw.length} games from cache`);
 
-  const selected = selectBalanced(raw, TARGET);
-  console.log(`selected ${selected.length} (balanced by category)`);
+  const selected = selectQualityWeighted(raw, TARGET);
+  console.log(`selected ${selected.length} (quality-weighted, category-floored)`);
 
   const seen = new Set();
   const lines = [];
@@ -211,6 +250,11 @@ function main() {
         .filter(Boolean),
     };
 
+    // 精品标记：Best Games -> featured（首页精选），3D -> popular（热门）
+    const gtags = (g.tags || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const isBest = gtags.includes("Best Games");
+    const is3D = gtags.some((x) => x === "3D" || x === "3D Games");
+
     const content = genContent(t);
     const tagsArr = t.tags.map((x) => JSON.stringify(x)).join(", ");
     const faqArr = content.faq
@@ -226,11 +270,11 @@ function main() {
     emoji: ${JSON.stringify(emojiFor(g.category))},
     url: ${JSON.stringify(g.url)},
     embedUrl: ${JSON.stringify(g.url)},
-    rating: 4.6,
+    rating: ${isBest ? 4.8 : is3D ? 4.7 : 4.5},
     plays: "0",
     siteIds: ["darlynmae"],
-    featured: false,
-    popular: false,
+    featured: ${isBest},
+    popular: ${is3D},
     isNew: true,
     real: true,
     source: "gamemonetize",
