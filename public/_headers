@@ -1,0 +1,11 @@
+# Cloudflare Pages 缓存规则
+# 规则从上到下匹配，越具体的规则优先。
+
+# Next.js 打包的静态资源文件名带 hash，内容永不变，可缓存 1 年
+/_next/static/**
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML 页面：浏览器每次重新验证，但 Cloudflare 边缘缓存 1 小时
+# 这样更新内容后访客最多 1 小时能看到新版（Pages 部署时会自动清缓存）
+/*
+  Cache-Control: public, max-age=0, s-maxage=3600, must-revalidate
