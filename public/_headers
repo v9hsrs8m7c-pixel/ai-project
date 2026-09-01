@@ -5,7 +5,8 @@
 /_next/static/**
   Cache-Control: public, max-age=31536000, immutable
 
-# HTML 页面：浏览器每次重新验证，但 Cloudflare 边缘缓存 1 小时
-# 这样更新内容后访客最多 1 小时能看到新版（Pages 部署时会自动清缓存）
+# HTML 页面：浏览器缓存 1 小时，Cloudflare 边缘缓存 24 小时
+# 这样 HTML 也会被 CDN 命中（cf-cache-status -> HIT）。
+# 更新内容后重新部署会自动清缓存，访客立即看到新版。
 /*
-  Cache-Control: public, max-age=0, s-maxage=3600, must-revalidate
+  Cache-Control: public, max-age=3600, s-maxage=86400
