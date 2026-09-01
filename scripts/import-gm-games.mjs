@@ -1,7 +1,8 @@
 // import-gm-games.mjs
 // ---------------------------------------------------------------------------
 // Pulls GameMonetize publisher games from the cached feed JSON, selects a
-// balanced ~500-game catalog, and writes a typed `games-gm.ts` data source.
+// balanced ~200-game catalog (even per category), and writes a typed
+// `games-gm.ts` data source.
 //
 // IMPORTANT (SEO): every GameMonetize publisher receives the SAME `description`
 // from the feed. Copying it verbatim makes our pages identical to thousands of
@@ -21,7 +22,7 @@ const CACHE = resolve(ROOT, "scripts/.cache/gm-feed-raw.json");
 const OUT_DIR = resolve(ROOT, "src/data/sources/gamemonetize");
 const OUT_FILE = resolve(OUT_DIR, "games-gm.ts");
 
-const TARGET = 500; // 首批规模（按分类均衡选取）
+const TARGET = 200; // 首批规模（按分类均匀选取，每类平摊后再补齐）
 
 // --- slug -----------------------------------------------------------------
 function slugify(s) {
@@ -150,23 +151,30 @@ function selectBalanced(games, target) {
     if (!byCat.has(c)) byCat.set(c, []);
     byCat.get(c).push(g);
   }
-  const total = games.length;
+  const cats = [...byCat.entries()];
+  const numCats = cats.length;
+  const base = Math.floor(target / numCats); // 每类平摊配额
   const out = [];
   const used = new Set();
-  for (const [, list] of byCat) {
-    const quota = Math.max(1, Math.round((list.length / total) * target));
-    for (const g of list.slice(0, quota)) {
-      if (out.length >= target) break;
-      const key = g.id;
-      if (used.has(key)) continue;
-      used.add(key);
+
+  // 第一遍：每类取 base 个（受该类库存上限约束）
+  const queues = [];
+  for (const [, list] of cats) {
+    const take = Math.min(base, list.length);
+    for (const g of list.slice(0, take)) {
+      used.add(g.id);
       out.push(g);
     }
-    if (out.length >= target) break;
+    if (list.length > take) queues.push(list.slice(take)); // 剩余进补齐队列
   }
-  // top up if under target
-  for (const g of games) {
-    if (out.length >= target) break;
+
+  // 补齐：在仍有剩余的类之间轮询（round-robin），保证额外名额均匀分配
+  let i = 0;
+  while (out.length < target && queues.some((q) => q.length > 0)) {
+    const q = queues[i % queues.length];
+    i++;
+    if (q.length === 0) continue;
+    const g = q.shift();
     if (used.has(g.id)) continue;
     used.add(g.id);
     out.push(g);
